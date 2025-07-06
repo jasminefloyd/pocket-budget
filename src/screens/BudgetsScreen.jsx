@@ -1,14 +1,14 @@
-import { useState } from "react"
+import { useState } from "react";
 
 export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode, setBudgets }) {
-  const [editingBudgetId, setEditingBudgetId] = useState(null)
-  const [budgetNameInput, setBudgetNameInput] = useState("")
-  const [openMenuId, setOpenMenuId] = useState(null)
+  const [editingBudgetId, setEditingBudgetId] = useState(null);
+  const [budgetNameInput, setBudgetNameInput] = useState("");
+  const [openMenuId, setOpenMenuId] = useState(null);
 
   const openBudget = (budget) => {
-    setSelectedBudget(budget)
-    setViewMode("details")
-  }
+    setSelectedBudget(budget);
+    setViewMode("details");
+  };
 
   const createBudget = () => {
     const newBudget = {
@@ -16,20 +16,20 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
       name: `Budget ${budgets.length + 1}`,
       transactions: [],
       createdAt: new Date().toLocaleDateString(),
-      categoryBudgets: [] // ✅ initialize empty array
-    }
-    setBudgets([...budgets, newBudget])
-  }
+      categoryBudgets: []
+    };
+    setBudgets([...budgets, newBudget]);
+  };
 
   const saveBudgetName = (budget) => {
     if (!budgetNameInput.trim()) {
-      setEditingBudgetId(null)
-      return
+      setEditingBudgetId(null);
+      return;
     }
-    const updated = budgets.map((b) => (b.id === budget.id ? { ...b, name: budgetNameInput.trim() } : b))
-    setBudgets(updated)
-    setEditingBudgetId(null)
-  }
+    const updated = budgets.map((b) => (b.id === budget.id ? { ...b, name: budgetNameInput.trim() } : b));
+    setBudgets(updated);
+    setEditingBudgetId(null);
+  };
 
   const duplicateBudget = (budget) => {
     const copy = {
@@ -37,15 +37,15 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
       id: Date.now().toString(),
       name: `${budget.name} (Copy)`,
       createdAt: new Date().toLocaleDateString(),
-    }
-    setBudgets([...budgets, copy])
-    setOpenMenuId(null)
-  }
+    };
+    setBudgets([...budgets, copy]);
+    setOpenMenuId(null);
+  };
 
   const deleteBudget = (budgetId) => {
-    setBudgets(budgets.filter((b) => b.id !== budgetId))
-    setOpenMenuId(null)
-  }
+    setBudgets(budgets.filter((b) => b.id !== budgetId));
+    setOpenMenuId(null);
+  };
 
   return (
     <div>
@@ -60,11 +60,24 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
         budgets.map((budget) => {
           const totalIncome = budget.transactions
             .filter((t) => t.type === "income")
-            .reduce((sum, t) => sum + t.amount, 0)
+            .reduce((sum, t) => sum + t.amount, 0);
           const totalExpenses = budget.transactions
             .filter((t) => t.type === "expense")
-            .reduce((sum, t) => sum + t.amount, 0)
-          const balance = totalIncome - totalExpenses
+            .reduce((sum, t) => sum + t.amount, 0);
+          const balance = totalIncome - totalExpenses;
+
+          // Calculate category actuals and overspent flag
+          // Calculate category actuals and overspent flag
+const categorySummaries = (budget.categoryBudgets || []).map((cat) => {
+  const actual = budget.transactions
+    .filter((t) => t.type === "expense" && t.category === cat.name)
+    .reduce((sum, t) => sum + t.amount, 0);
+  const isOver = actual > cat.budgetAmount;
+  return { ...cat, actual, isOver };
+});
+
+const isAnyCategoryOver = categorySummaries.some((cat) => cat.isOver);
+
 
           return (
             <div key={budget.id} className="budgetCard">
@@ -82,24 +95,49 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
                     <div
                       className="budgetName"
                       onClick={(e) => {
-                        e.stopPropagation()
-                        setEditingBudgetId(budget.id)
-                        setBudgetNameInput(budget.name)
+                        e.stopPropagation();
+                        setEditingBudgetId(budget.id);
+                        setBudgetNameInput(budget.name);
                       }}
                     >
                       {budget.name}
+                      {isAnyCategoryOver && <span className="expense" style={{ marginLeft: "0.5rem" }}>🚩</span>}
                     </div>
                   )}
+
                   <div className="budgetBalance">
                     Balance: <span className={balance >= 0 ? "income" : "expense"}>${balance.toFixed(2)}</span>
                   </div>
+
+                  <div className="category-budgets">
+                    {categorySummaries.map((cat) => (
+                      <div key={cat.name} className="category-budget-row">
+                        <div className="category-budget-name">
+                          {cat.name}
+                          {cat.isOver && <span className="expense" style={{ marginLeft: "0.3rem" }}>⚠</span>}
+                        </div>
+                        <div className="category-budget-amounts">
+                          ${cat.actual.toFixed(2)} / ${cat.budgetAmount.toFixed(2)}
+                        </div>
+                        <div className="progress-bar">
+                          <div
+                            className={`progress-fill ${cat.isOver ? "over" : ""}`}
+                            style={{
+                              width: `${Math.min((cat.actual / cat.budgetAmount) * 100, 100)}%`
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
+
                 <div className="menuContainer">
                   <button
                     className="menuButton"
                     onClick={(e) => {
-                      e.stopPropagation()
-                      setOpenMenuId(openMenuId === budget.id ? null : budget.id)
+                      e.stopPropagation();
+                      setOpenMenuId(openMenuId === budget.id ? null : budget.id);
                     }}
                   >
                     <i className="fa-solid fa-ellipsis-vertical"></i>
@@ -117,7 +155,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
                 </div>
               </div>
             </div>
-          )
+          );
         })
       )}
 
@@ -128,5 +166,5 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
         Manage Categories
       </button>
     </div>
-  )
+  );
 }
