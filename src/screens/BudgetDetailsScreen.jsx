@@ -77,9 +77,7 @@ export default function BudgetDetailsScreen({
     );
 
     setBudgets(updatedBudgets);
-    // ✅ Correctly re-select from the updated budgets array
     setSelectedBudget(updatedBudgets.find((b) => b.id === budget.id));
-
     setShowModal(false);
     setEditingTx(null);
   };
@@ -248,7 +246,63 @@ export default function BudgetDetailsScreen({
       {showModal && (
         <div className="modalBackdrop">
           <div className="modalContent">
-            {/* Your modal content */}
+            <h2 className="header modal-header">
+              {editingTx ? "Edit Transaction" : `Add ${formTx.type}`}
+            </h2>
+            <input
+              className="input"
+              placeholder="Name"
+              value={formTx.name}
+              onChange={(e) => setFormTx({ ...formTx, name: e.target.value })}
+            />
+            <input
+              className="input"
+              placeholder="$"
+              name="US currency"
+              type="number"
+              value={formTx.amount}
+              onChange={(e) => setFormTx({ ...formTx, amount: e.target.value })}
+            />
+            <select
+              className="input"
+              value={formTx.category}
+              onChange={(e) => setFormTx({ ...formTx, category: e.target.value })}
+            >
+              <option value="">Select Category</option>
+              {categories[resolveTypeKey(formTx.type)]?.map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.icon} {c.name}
+                </option>
+              ))}
+            </select>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    setFormTx({ ...formTx, receipt: reader.result });
+                  };
+                  reader.readAsDataURL(file);
+                }
+              }}
+            />
+            <div className="modal-actions">
+              <button className="addButton primary-button" onClick={saveTransaction}>
+                {editingTx ? "Update" : "Add"}
+              </button>
+              <button
+                className="cancelButton secondary-button"
+                onClick={() => {
+                  setShowModal(false);
+                  setEditingTx(null);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
