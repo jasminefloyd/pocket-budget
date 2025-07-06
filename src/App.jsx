@@ -17,7 +17,7 @@ export default function App() {
       { name: "Gift", icon: "🎁" },
     ],
     expense: [
-      { name: "Food", icon: "🍔" },
+      { name: "Groceries", icon: "🛒" },
       { name: "Rent", icon: "🏠" },
       { name: "Transportation", icon: "🚗" },
       { name: "Entertainment", icon: "🎮" },
@@ -39,7 +39,7 @@ export default function App() {
         transactions: [
           { id: "t1", name: "Salary", amount: 4500, category: "Salary", date: "1/1/2025", type: "income" },
           { id: "t2", name: "Rent", amount: 1200, category: "Bills", date: "1/3/2025", type: "expense" },
-          { id: "t3", name: "Groceries", amount: 320, category: "Food", date: "1/5/2025", type: "expense" },
+          { id: "t3", name: "Groceries", amount: 320, category: "Groceries", date: "1/5/2025", type: "expense" },
         ],
         createdAt: "1/1/2025",
       }

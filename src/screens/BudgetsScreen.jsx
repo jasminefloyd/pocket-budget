@@ -16,6 +16,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
       name: `Budget ${budgets.length + 1}`,
       transactions: [],
       createdAt: new Date().toLocaleDateString(),
+      categoryBudgets: [] // ✅ initialize empty array
     }
     setBudgets([...budgets, newBudget])
   }

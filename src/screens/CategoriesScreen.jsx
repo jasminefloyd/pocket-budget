@@ -6,7 +6,7 @@ export default function CategoriesScreen({ categories, setCategories, budgets, s
   const [newCat, setNewCat] = useState({ name: "", icon: "💲" })
   const [editingCat, setEditingCat] = useState(null)
 
-  const iconBank = ["💼", "💻", "📈", "🏢", "🎁", "🍔", "🚗", "🎮", "🧾", "🛍️", "💲", "🏠", "🍿"]
+  const iconBank = ["💼", "💻", "📈", "🏢", "🎁", "🍔", "🍽️", "🛒", "🚗", "🎮", "🧾", "🛍️", "💲", "🏠", "🍿"]
 
   const addCategory = () => {
     if (!newCat.name.trim()) return
@@ -99,7 +99,7 @@ export default function CategoriesScreen({ categories, setCategories, budgets, s
                 </div>
                 <div className="category-actions">
                   <button className="addButton primary-button" onClick={saveEdit}>
-                    Save
+                    Add
                   </button>
                   <button className="cancelButton secondary-button" onClick={() => setEditingCat(null)}>
                     Cancel
@@ -149,7 +149,7 @@ export default function CategoriesScreen({ categories, setCategories, budgets, s
             </div>
             <div className="modal-actions">
               <button className="addButton primary-button" onClick={addCategory}>
-                Save
+                Add
               </button>
               <button className="cancelButton secondary-button" onClick={() => setShowAddModal(false)}>
                 Cancel
