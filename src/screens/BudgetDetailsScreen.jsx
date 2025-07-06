@@ -197,44 +197,45 @@ export default function BudgetDetailsScreen({
         <h3 className="chartTitle">Transaction Details</h3>
         {(budget.categoryBudgets || []).map((cb) => {
           const actualSpent = budget.transactions
-            .filter(
-              (t) => t.category === cb.category && t.type === "expense"
-            )
-            .reduce((sum, t) => sum + t.amount, 0);
+  .filter(
+    (t) =>
+      t.type === "expense" &&
+      t.category.toLowerCase() === cb.category.toLowerCase()
+  )
+  .reduce((sum, t) => sum + t.amount, 0);
+
           const remaining = cb.budgetedAmount - actualSpent;
           const percentage =
             cb.budgetedAmount > 0
               ? (actualSpent / cb.budgetedAmount) * 100
               : 0;
-          const isOver = remaining < 0;
+          const isOver = remaining < -0.01;
 
           return (
             <div key={cb.category} className="category-budget-row">
               <div className="category-budget-name">{cb.category}</div>
               <div className="category-budget-progress">
                 <span className="category-budget-amounts">
-                  ${actualSpent.toFixed(2)} spent / $
-                  {cb.budgetedAmount.toFixed(2)} budgeted →
-                  <span
-                    className={`remaining-amount ${
-                      isOver ? "expense" : "income"
-                    }`}
-                    onClick={() =>
-                      openAddModal(
-                        {
-                          name: `${cb.category} Expense`,
-                          category: cb.category,
-                          amount: "",
-                        },
-                        "expense"
-                      )
-                    }
-                  >
-                    {isOver
-                      ? `Over by $${Math.abs(remaining).toFixed(2)}`
-                      : `$${remaining.toFixed(2)} left (click to log)`}
-                  </span>
-                </span>
+  ${actualSpent.toFixed(2)} spent / ${cb.budgetedAmount.toFixed(2)} budgeted →
+  <span
+    className={`remaining-amount ${remaining < 0 ? "expense" : "income"}`}
+    onClick={() =>
+      openAddModal(
+        {
+          name: `${cb.category} Expense`,
+          category: cb.category,
+          amount: "",
+        },
+        "expense"
+      )
+    }
+  >
+    {remaining < 0
+      ? `Over by $${Math.abs(remaining).toFixed(2)}`
+      : `$${remaining.toFixed(2)} left (click to log)`}
+  </span>
+</span>
+
                 <div className="progress-bar">
                   <div
                     className={`progress-fill ${isOver ? "over" : ""}`}
@@ -319,15 +320,20 @@ export default function BudgetDetailsScreen({
                 setFormTx({ ...formTx, name: e.target.value })
               }
             />
+            
             <input
               className="input"
-              placeholder="Amount"
-              type="number"
-              value={formTx.amount}
+              name="US currency"
+              type="text"
+              value={`$ ${formTx.amount}`}
               onChange={(e) =>
-                setFormTx({ ...formTx, amount: e.target.value })
+                setFormTx({
+                  ...formTx,
+                  amount: e.target.value.replace(/[^0-9.]/g, ""), // Strip non-numeric
+                })
               }
             />
+
             <select
               className="input"
               value={formTx.category}
