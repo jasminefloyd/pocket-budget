@@ -776,7 +776,8 @@ body {
   justify-content: center;
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
   animation: expandBar 0.8s ease-out;
-  padding-right: 2rem; 
+  padding-right: 1.5rem; 
+  padding-left: 2rem;
 }
 
 @keyframes expandBar {
