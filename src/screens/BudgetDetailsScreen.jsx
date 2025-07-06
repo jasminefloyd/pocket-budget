@@ -284,9 +284,8 @@ export default function BudgetDetailsScreen({
             <input
               className="input"
               placeholder="$"
-              name="US currency"
               type="number"
-              value={`$ ${formTx.amount}`}
+              value={formTx.amount}
               onChange={(e) => setFormTx({ ...formTx, amount: e.target.value })}
             />
             <select
