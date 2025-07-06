@@ -2,7 +2,7 @@
   "name": "pocket-budget-app",
   "private": true,
   "version": "0.0.0",
-  "homepage": "https://jasminefloyd.github.io/pocket-budget/",
+  "homepage": "https://jasminefloyd.github.io/pocket-budget",
   "type": "module",
   "scripts": {
     "dev": "vite",
