@@ -77,7 +77,9 @@ export default function BudgetDetailsScreen({
     );
 
     setBudgets(updatedBudgets);
-    setSelectedBudget(updatedBudget);
+    // ✅ Correctly re-select from the updated budgets array
+    setSelectedBudget(updatedBudgets.find((b) => b.id === budget.id));
+
     setShowModal(false);
     setEditingTx(null);
   };
@@ -89,7 +91,6 @@ export default function BudgetDetailsScreen({
     }));
   };
 
-  // Ensure .filter is called on an array (even if transactions missing)
   const totalIncome = (budget.transactions || [])
     .filter((t) => t.type === "income")
     .reduce((sum, t) => sum + t.amount, 0);
@@ -142,7 +143,7 @@ export default function BudgetDetailsScreen({
             .filter(
               (t) =>
                 t.type === "expense" &&
-                t.category.toLowerCase() === cb.category.toLowerCase()
+                t.category.toLowerCase().trim() === cb.category.toLowerCase().trim()
             )
             .reduce((sum, t) => sum + t.amount, 0);
 
@@ -247,7 +248,7 @@ export default function BudgetDetailsScreen({
       {showModal && (
         <div className="modalBackdrop">
           <div className="modalContent">
-            {/* modal code unchanged */}
+            {/* Your modal content */}
           </div>
         </div>
       )}
