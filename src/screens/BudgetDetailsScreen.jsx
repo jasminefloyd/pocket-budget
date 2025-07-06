@@ -134,6 +134,32 @@ export default function BudgetDetailsScreen({
         </span>
       </div>
 
+      {/* Income vs Expenses Bar Chart */}
+      <div className="chartContainer">
+        <h3 className="chartTitle">Budget Overview</h3>
+        <div className="chartWrapper">
+          <div className="incomeBar">
+            <div className="incomeBarContent">
+              <span className="barLabel">${totalIncome.toFixed(2)}</span>
+            </div>
+            {totalIncome > 0 && (
+              <div
+                className="expenseBar"
+                style={{
+                  width: `${Math.min((totalExpenses / totalIncome) * 100, 100)}%`,
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  height: "100%",
+                }}
+              >
+                <span className="barLabel expenseLabel"> ${totalExpenses.toFixed(2)}</span>
+              </div>
+            )}
+          </div>
+          </div>
+          <hr></hr>
+
       <div className="category-budgets">
         <h3 className="chartTitle">Transaction Details</h3>
         {(budget.categoryBudgets || []).map((cb) => {
@@ -260,7 +286,7 @@ export default function BudgetDetailsScreen({
               placeholder="$"
               name="US currency"
               type="number"
-              value={formTx.amount}
+              value={`$ ${formTx.amount}`}
               onChange={(e) => setFormTx({ ...formTx, amount: e.target.value })}
             />
             <select
@@ -306,6 +332,7 @@ export default function BudgetDetailsScreen({
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }
