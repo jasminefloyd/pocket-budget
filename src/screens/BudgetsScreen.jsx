@@ -16,7 +16,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
       name: `Budget ${budgets.length + 1}`,
       transactions: [],
       createdAt: new Date().toLocaleDateString(),
-      categoryBudgets: []
+      categoryBudgets: []   // ✅ Ensure new budgets have this
     };
     setBudgets([...budgets, newBudget]);
   };
@@ -26,7 +26,9 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
       setEditingBudgetId(null);
       return;
     }
-    const updated = budgets.map((b) => (b.id === budget.id ? { ...b, name: budgetNameInput.trim() } : b));
+    const updated = budgets.map((b) =>
+      b.id === budget.id ? { ...b, name: budgetNameInput.trim() } : b
+    );
     setBudgets(updated);
     setEditingBudgetId(null);
   };
@@ -37,6 +39,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
       id: Date.now().toString(),
       name: `${budget.name} (Copy)`,
       createdAt: new Date().toLocaleDateString(),
+      categoryBudgets: budget.categoryBudgets || [],  // ✅ Ensure copy has array
     };
     setBudgets([...budgets, copy]);
     setOpenMenuId(null);
@@ -58,26 +61,31 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
         <p className="empty-state">No budgets found. Create one to get started!</p>
       ) : (
         budgets.map((budget) => {
-          const totalIncome = budget.transactions
+          const totalIncome = (budget.transactions || [])
             .filter((t) => t.type === "income")
             .reduce((sum, t) => sum + t.amount, 0);
-          const totalExpenses = budget.transactions
+
+          const totalExpenses = (budget.transactions || [])
             .filter((t) => t.type === "expense")
             .reduce((sum, t) => sum + t.amount, 0);
+
           const balance = totalIncome - totalExpenses;
 
-          // Calculate category actuals and overspent flag
-          // Calculate category actuals and overspent flag
-const categorySummaries = (budget.categoryBudgets || []).map((cat) => {
-  const actual = budget.transactions
-    .filter((t) => t.type === "expense" && t.category === cat.name)
-    .reduce((sum, t) => sum + t.amount, 0);
-  const isOver = actual > cat.budgetAmount;
-  return { ...cat, actual, isOver };
-});
+          // ✅ Safely map categoryBudgets
+          const categorySummaries = (budget.categoryBudgets || []).map((cat) => {
+            const actual = (budget.transactions || [])
+              .filter(
+                (t) =>
+                  t.type === "expense" &&
+                  t.category.toLowerCase().trim() === cat.name.toLowerCase().trim()
+              )
+              .reduce((sum, t) => sum + t.amount, 0);
 
-const isAnyCategoryOver = categorySummaries.some((cat) => cat.isOver);
+            const isOver = actual > cat.budgetAmount;
+            return { ...cat, actual, isOver };
+          });
 
+          const isAnyCategoryOver = categorySummaries.some((cat) => cat.isOver);
 
           return (
             <div key={budget.id} className="budgetCard">
@@ -101,7 +109,9 @@ const isAnyCategoryOver = categorySummaries.some((cat) => cat.isOver);
                       }}
                     >
                       {budget.name}
-                      {isAnyCategoryOver && <span className="expense" style={{ marginLeft: "0.5rem" }}>🚩</span>}
+                      {isAnyCategoryOver && (
+                        <span className="expense" style={{ marginLeft: "0.5rem" }}>🚩</span>
+                      )}
                     </div>
                   )}
 
