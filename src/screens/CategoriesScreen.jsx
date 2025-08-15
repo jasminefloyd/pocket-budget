@@ -1,3 +1,5 @@
+"use client"
+
 import { useState } from "react"
 
 export default function CategoriesScreen({ categories, setCategories, budgets, setViewMode }) {
@@ -6,7 +8,41 @@ export default function CategoriesScreen({ categories, setCategories, budgets, s
   const [newCat, setNewCat] = useState({ name: "", icon: "💲" })
   const [editingCat, setEditingCat] = useState(null)
 
-  const iconBank = ["💼", "💻", "📈", "🏢", "🎁", "🍔", "🍽️", "🛒", "🚗", "🎮", "🧾", "🛍️", "💲", "🏠", "🍿"]
+  // Curated selection of 32 most useful icons
+  const iconBank = [
+    "💲", // Money/General
+    "💰", // Savings
+    "💳", // Credit Card
+    "🏦", // Bank
+    "🍔", // Food/Fast Food
+    "🍽️", // Dining
+    "☕", // Coffee/Drinks
+    "🛒", // Groceries
+    "🚗", // Car/Transportation
+    "⛽", // Gas
+    "✈️", // Travel
+    "🚌", // Public Transport
+    "🏠", // Housing/Rent
+    "💡", // Utilities
+    "📱", // Phone/Mobile
+    "💻", // Technology
+    "🎮", // Entertainment/Gaming
+    "🎬", // Movies
+    "📚", // Education/Books
+    "🏥", // Healthcare
+    "💊", // Medicine
+    "🛍️", // Shopping
+    "👕", // Clothing
+    "🎁", // Gifts
+    "💼", // Work/Business
+    "📈", // Investment
+    "🔧", // Maintenance/Repairs
+    "🎯", // Goals/Targets
+    "🧾", // Bills/Receipts
+    "⭐", // Important/Priority
+    "🎉", // Celebration/Events
+    "📄", // Documents/Other
+  ]
 
   const addCategory = () => {
     if (!newCat.name.trim()) return
@@ -55,7 +91,7 @@ export default function CategoriesScreen({ categories, setCategories, budgets, s
   return (
     <div>
       <button className="cancelButton secondary-button" onClick={() => setViewMode("budgets")}>
-        <i className="fa-solid fa-left-long"></i> Back to Budgets
+        ← Back to Budgets
       </button>
       <h1 className="header">Manage Categories</h1>
 
@@ -99,7 +135,7 @@ export default function CategoriesScreen({ categories, setCategories, budgets, s
                 </div>
                 <div className="category-actions">
                   <button className="addButton primary-button" onClick={saveEdit}>
-                    Add
+                    Save
                   </button>
                   <button className="cancelButton secondary-button" onClick={() => setEditingCat(null)}>
                     Cancel
@@ -109,14 +145,14 @@ export default function CategoriesScreen({ categories, setCategories, budgets, s
             ) : (
               <div className="category-display">
                 <span className="category-info">
-                  {c.icon}  {c.name}
+                  {c.icon} {c.name}
                 </span>
                 <div className="category-actions">
                   <button className="action-button" onClick={() => startEdit(c)}>
-                    <i className="fa-solid fa-pen"></i>
+                    Edit
                   </button>
                   <button className="action-button delete" onClick={() => deleteCategory(c.name)}>
-                    <i className="fa-solid fa-trash"></i>
+                    Delete
                   </button>
                 </div>
               </div>
