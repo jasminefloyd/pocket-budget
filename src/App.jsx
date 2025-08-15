@@ -1,12 +1,20 @@
-import { useState, useEffect } from "react";
-import BudgetsScreen from "./screens/BudgetsScreen";
-import BudgetDetailsScreen from "./screens/BudgetDetailsScreen";
-import CategoriesScreen from "./screens/CategoriesScreen";
-import AIInsightsScreen from "./screens/AIInsightsScreen";
-import "@fortawesome/fontawesome-free/css/all.min.css";
+"use client"
 
-export default function App() {
-  const [budgets, setBudgets] = useState([]);
+import { useState, useEffect } from "react"
+import { AuthProvider, useAuth } from "./contexts/AuthContext"
+import { getBudgets, getUserCategories, updateUserCategories } from "./lib/supabase"
+import BudgetsScreen from "./screens/BudgetsScreen"
+import BudgetDetailsScreen from "./screens/BudgetDetailsScreen"
+import CategoriesScreen from "./screens/CategoriesScreen"
+import AIInsightsScreen from "./screens/AIInsightsScreen"
+import LoginScreen from "./screens/LoginScreen"
+import LoadingScreen from "./components/LoadingScreen"
+import Header from "./components/Header"
+import InstallPrompt from "./components/InstallPrompt"
+
+function AppContent() {
+  const { user, loading: authLoading, initializing } = useAuth()
+  const [budgets, setBudgets] = useState([])
   const [categories, setCategories] = useState({
     income: [
       { name: "Salary", icon: "💼" },
@@ -23,69 +31,109 @@ export default function App() {
       { name: "Bills", icon: "🧾" },
       { name: "Shopping", icon: "🛍️" },
     ],
-  });
-  const [selectedBudget, setSelectedBudget] = useState(null);
-  const [viewMode, setViewMode] = useState("budgets");
-  const [isLoading, setIsLoading] = useState(true);
+  })
+  const [selectedBudget, setSelectedBudget] = useState(null)
+  const [viewMode, setViewMode] = useState("budgets")
+  const [isLoading, setIsLoading] = useState(true)
 
-  // On first mount: load from localStorage OR fallback to example
+  // Load user data when authenticated
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const saved = localStorage.getItem("budgets");
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          setBudgets(parsed);
-        } catch (e) {
-          console.error("Failed to parse saved budgets:", e);
-          setBudgets([]);
-        }
-      } else {
-        const example = {
-          id: "example-budget",
-          name: "Monthly Budget Example",
-          transactions: [
-            { id: "t1", name: "Salary", amount: 4500, category: "Salary", date: "1/1/2025", type: "income" },
-            { id: "t2", name: "Rent", amount: 1200, category: "Bills", date: "1/3/2025", type: "expense" },
-            { id: "t3", name: "Groceries", amount: 320, category: "Groceries", date: "1/5/2025", type: "expense" },
-          ],
-          createdAt: "1/1/2025",
-          categoryBudgets: [],
-        };
-        setBudgets([example]);
-      }
-      setIsLoading(false);
-    }, 2000);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Save budgets to localStorage whenever they change
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem("budgets", JSON.stringify(budgets));
+    if (user && !authLoading) {
+      loadUserData()
+    } else if (!user && !authLoading && !initializing) {
+      setIsLoading(false)
     }
-  }, [budgets, isLoading]);
+  }, [user, authLoading, initializing])
 
-  if (isLoading) {
+  const loadUserData = async () => {
+    try {
+      setIsLoading(true)
+
+      // Load budgets
+      const { data: budgetsData, error: budgetsError } = await getBudgets(user.id)
+      if (budgetsError) {
+        console.error("Error loading budgets:", budgetsError)
+      } else {
+        // Transform the data to match the existing structure
+        const transformedBudgets =
+          budgetsData?.map((budget) => ({
+            id: budget.id,
+            name: budget.name,
+            createdAt: new Date(budget.created_at).toLocaleDateString(),
+            categoryBudgets: budget.category_budgets || [],
+            transactions:
+              budget.transactions?.map((tx) => ({
+                id: tx.id,
+                name: tx.name,
+                amount: tx.amount,
+                budgetedAmount: tx.budgeted_amount,
+                category: tx.category,
+                type: tx.type,
+                date: tx.date,
+                receipt: tx.receipt_url,
+              })) || [],
+          })) || []
+
+        setBudgets(transformedBudgets)
+      }
+
+      // Load user categories
+      const { data: categoriesData, error: categoriesError } = await getUserCategories(user.id)
+      if (categoriesError && categoriesError.code !== "PGRST116") {
+        console.error("Error loading categories:", categoriesError)
+      } else if (categoriesData?.categories) {
+        setCategories(categoriesData.categories)
+      }
+    } catch (error) {
+      console.error("Error loading user data:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCategoriesUpdate = async (newCategories) => {
+    setCategories(newCategories)
+    if (user) {
+      try {
+        await updateUserCategories(user.id, newCategories)
+      } catch (error) {
+        console.error("Error updating categories:", error)
+      }
+    }
+  }
+
+  // Show loading screen during initialization
+  if (initializing) {
+    return <LoadingScreen message="Initializing..." />
+  }
+
+  // Show login screen if not authenticated
+  if (!user && !authLoading) {
     return (
-      <div className="container loading-container">
-        <div className="loading-content">
-          <h1 className="header">Pocket Budget</h1>
-          <p className="loading-text">Loading...</p>
-        </div>
-      </div>
-    );
+      <>
+        <LoginScreen />
+        <InstallPrompt />
+      </>
+    )
+  }
+
+  // Show loading screen while loading user data
+  if (authLoading || isLoading) {
+    return <LoadingScreen message="Loading your data..." />
   }
 
   return (
     <div className="container">
+      <Header title="Pocket Budget" showLogout={viewMode === "budgets"} />
+      <InstallPrompt />
+
       {viewMode === "budgets" && (
         <BudgetsScreen
           budgets={budgets}
           setSelectedBudget={setSelectedBudget}
           setViewMode={setViewMode}
           setBudgets={setBudgets}
+          userId={user.id}
         />
       )}
       {viewMode === "details" && selectedBudget && (
@@ -96,22 +144,26 @@ export default function App() {
           setBudgets={setBudgets}
           budgets={budgets}
           setSelectedBudget={setSelectedBudget}
+          userId={user.id}
         />
       )}
       {viewMode === "categories" && (
         <CategoriesScreen
           categories={categories}
-          setCategories={setCategories}
+          setCategories={handleCategoriesUpdate}
           budgets={budgets}
           setViewMode={setViewMode}
         />
       )}
-      {viewMode === "ai" && selectedBudget && (
-        <AIInsightsScreen
-          budget={selectedBudget}
-          setViewMode={setViewMode}
-        />
-      )}
+      {viewMode === "ai" && selectedBudget && <AIInsightsScreen budget={selectedBudget} setViewMode={setViewMode} />}
     </div>
-  );
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  )
 }

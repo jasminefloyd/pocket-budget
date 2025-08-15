@@ -1,53 +1,126 @@
 "use client"
 
 import { useState } from "react"
+import { createBudget, updateBudget, deleteBudget } from "../lib/supabase-mock"
 
-export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode, setBudgets }) {
+export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode, setBudgets, userId }) {
   const [editingBudgetId, setEditingBudgetId] = useState(null)
   const [budgetNameInput, setBudgetNameInput] = useState("")
   const [openMenuId, setOpenMenuId] = useState(null)
+  const [loading, setLoading] = useState(false)
 
   const openBudget = (budget) => {
     setSelectedBudget(budget)
     setViewMode("details")
   }
 
-  const createBudget = () => {
-    const newBudget = {
-      id: Date.now().toString(),
-      name: `Budget ${budgets.length + 1}`,
-      transactions: [],
-      createdAt: new Date().toLocaleDateString(),
-      categoryBudgets: [],
+  const createNewBudget = async () => {
+    setLoading(true)
+    try {
+      const newBudgetData = {
+        name: `Budget ${budgets.length + 1}`,
+        categoryBudgets: [],
+      }
+
+      const { data, error } = await createBudget(userId, newBudgetData)
+      if (error) {
+        console.error("Error creating budget:", error)
+        alert("Failed to create budget. Please try again.")
+      } else if (data?.[0]) {
+        const newBudget = {
+          id: data[0].id,
+          name: data[0].name,
+          createdAt: new Date(data[0].created_at).toLocaleDateString(),
+          categoryBudgets: data[0].category_budgets || [],
+          transactions: [],
+        }
+        setBudgets([newBudget, ...budgets])
+      }
+    } catch (error) {
+      console.error("Error creating budget:", error)
+      alert("Failed to create budget. Please try again.")
+    } finally {
+      setLoading(false)
     }
-    setBudgets([...budgets, newBudget])
   }
 
-  const saveBudgetName = (budget) => {
+  const saveBudgetName = async (budget) => {
     if (!budgetNameInput.trim()) {
       setEditingBudgetId(null)
       return
     }
-    const updated = budgets.map((b) => (b.id === budget.id ? { ...b, name: budgetNameInput.trim() } : b))
-    setBudgets(updated)
-    setEditingBudgetId(null)
-  }
 
-  const duplicateBudget = (budget) => {
-    const copy = {
-      ...budget,
-      id: Date.now().toString(),
-      name: `${budget.name} (Copy)`,
-      createdAt: new Date().toLocaleDateString(),
-      categoryBudgets: budget.categoryBudgets || [],
+    setLoading(true)
+    try {
+      const { error } = await updateBudget(budget.id, {
+        name: budgetNameInput.trim(),
+        categoryBudgets: budget.categoryBudgets,
+      })
+
+      if (error) {
+        console.error("Error updating budget:", error)
+        alert("Failed to update budget name. Please try again.")
+      } else {
+        const updated = budgets.map((b) => (b.id === budget.id ? { ...b, name: budgetNameInput.trim() } : b))
+        setBudgets(updated)
+      }
+    } catch (error) {
+      console.error("Error updating budget:", error)
+      alert("Failed to update budget name. Please try again.")
+    } finally {
+      setEditingBudgetId(null)
+      setLoading(false)
     }
-    setBudgets([...budgets, copy])
-    setOpenMenuId(null)
   }
 
-  const deleteBudget = (budgetId) => {
-    setBudgets(budgets.filter((b) => b.id !== budgetId))
-    setOpenMenuId(null)
+  const duplicateBudget = async (budget) => {
+    setLoading(true)
+    try {
+      const duplicateData = {
+        name: `${budget.name} (Copy)`,
+        categoryBudgets: budget.categoryBudgets || [],
+      }
+
+      const { data, error } = await createBudget(userId, duplicateData)
+      if (error) {
+        console.error("Error duplicating budget:", error)
+        alert("Failed to duplicate budget. Please try again.")
+      } else if (data?.[0]) {
+        const newBudget = {
+          id: data[0].id,
+          name: data[0].name,
+          createdAt: new Date(data[0].created_at).toLocaleDateString(),
+          categoryBudgets: data[0].category_budgets || [],
+          transactions: [],
+        }
+        setBudgets([newBudget, ...budgets])
+      }
+    } catch (error) {
+      console.error("Error duplicating budget:", error)
+      alert("Failed to duplicate budget. Please try again.")
+    } finally {
+      setOpenMenuId(null)
+      setLoading(false)
+    }
+  }
+
+  const deleteBudgetHandler = async (budgetId) => {
+    setLoading(true)
+    try {
+      const { error } = await deleteBudget(budgetId)
+      if (error) {
+        console.error("Error deleting budget:", error)
+        alert("Failed to delete budget. Please try again.")
+      } else {
+        setBudgets(budgets.filter((b) => b.id !== budgetId))
+      }
+    } catch (error) {
+      console.error("Error deleting budget:", error)
+      alert("Failed to delete budget. Please try again.")
+    } finally {
+      setOpenMenuId(null)
+      setLoading(false)
+    }
   }
 
   const fillDemoData = (budget) => {
@@ -176,8 +249,12 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
   return (
     <div>
       <div className="header-section">
-        <h1 className="header">Pocket Budget</h1>
         <p className="tagline">Manage your budgets and stay on top of your finances.</p>
+        <div className="demo-notice">
+          <p>
+            🧪 <strong>Demo Mode:</strong> All data is stored locally in your browser
+          </p>
+        </div>
       </div>
 
       {budgets.length === 0 ? (
@@ -207,7 +284,6 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
           })
 
           const isAnyCategoryOver = categorySummaries.some((cat) => cat.isOver)
-          const isExampleBudget = budget.id === "example-budget"
           const hasMinimalData = (budget.transactions || []).length <= 3
 
           return (
@@ -226,6 +302,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
                         }
                       }}
                       autoFocus
+                      disabled={loading}
                     />
                   ) : (
                     <div
@@ -251,14 +328,15 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
 
                   <div className="budgetDate">Created: {budget.createdAt}</div>
 
-                  {/* Fill Data Button for Example Budget */}
-                  {isExampleBudget && hasMinimalData && (
+                  {/* Fill Data Button for budgets with minimal data */}
+                  {hasMinimalData && (
                     <button
                       className="fill-data-button"
                       onClick={(e) => {
                         e.stopPropagation()
                         fillDemoData(budget)
                       }}
+                      disabled={loading}
                     >
                       📊 Fill with Demo Data
                     </button>
@@ -305,6 +383,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
                       setOpenMenuId(openMenuId === budget.id ? null : budget.id)
                     }}
                     title="More options"
+                    disabled={loading}
                   >
                     ⋮
                   </button>
@@ -317,6 +396,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
                           e.stopPropagation()
                           duplicateBudget(budget)
                         }}
+                        disabled={loading}
                       >
                         Copy Budget
                       </button>
@@ -325,9 +405,10 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
                         onClick={(e) => {
                           e.stopPropagation()
                           if (confirm(`Are you sure you want to delete "${budget.name}"?`)) {
-                            deleteBudget(budget.id)
+                            deleteBudgetHandler(budget.id)
                           }
                         }}
+                        disabled={loading}
                       >
                         Delete Budget
                       </button>
@@ -341,8 +422,8 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
       )}
 
       <div className="budget-actions">
-        <button className="addButton primary-button" onClick={createBudget}>
-          Create New Budget
+        <button className="addButton primary-button" onClick={createNewBudget} disabled={loading}>
+          {loading ? "Creating..." : "Create New Budget"}
         </button>
         <button className="cancelButton secondary-button cate-btn" onClick={() => setViewMode("categories")}>
           Manage Categories

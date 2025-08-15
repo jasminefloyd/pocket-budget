@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { createTransaction, updateTransaction, updateBudget } from "../lib/supabase-mock"
 
 export default function BudgetDetailsScreen({
   budget,
@@ -9,12 +10,14 @@ export default function BudgetDetailsScreen({
   setBudgets,
   budgets,
   setSelectedBudget,
+  userId,
 }) {
   const [tab, setTab] = useState("expenses")
   const [showModal, setShowModal] = useState(false)
   const [editingTx, setEditingTx] = useState(null)
   const [expandedReceipts, setExpandedReceipts] = useState({})
   const [currentPage, setCurrentPage] = useState(1)
+  const [loading, setLoading] = useState(false)
   const [formTx, setFormTx] = useState({
     name: "",
     amount: "",
@@ -56,33 +59,81 @@ export default function BudgetDetailsScreen({
     setShowModal(true)
   }
 
-  const saveTransaction = () => {
+  const saveTransaction = async () => {
     if (!formTx.name.trim() || isNaN(formTx.amount) || !formTx.category.trim()) {
       alert("Please fill in all required fields correctly")
       return
     }
 
-    const cleanedTx = {
-      ...formTx,
-      amount: Number.parseFloat(formTx.amount),
-      budgetedAmount: formTx.budgetedAmount ? Number.parseFloat(formTx.budgetedAmount) : null,
-      type: resolveTypeKey(formTx.type),
+    setLoading(true)
+    try {
+      const cleanedTx = {
+        name: formTx.name.trim(),
+        amount: Number.parseFloat(formTx.amount),
+        budgetedAmount: formTx.budgetedAmount ? Number.parseFloat(formTx.budgetedAmount) : null,
+        category: formTx.category,
+        type: resolveTypeKey(formTx.type),
+        date: formTx.date,
+        receipt: formTx.receipt,
+      }
+
+      let updatedTransactions
+      if (editingTx) {
+        const { error } = await updateTransaction(editingTx.id, cleanedTx)
+        if (error) {
+          console.error("Error updating transaction:", error)
+          alert("Failed to update transaction. Please try again.")
+          return
+        }
+        updatedTransactions = (budget.transactions || []).map((t) =>
+          t.id === editingTx.id ? { ...cleanedTx, id: editingTx.id } : t,
+        )
+      } else {
+        const { data, error } = await createTransaction(budget.id, cleanedTx)
+        if (error) {
+          console.error("Error creating transaction:", error)
+          alert("Failed to create transaction. Please try again.")
+          return
+        }
+        const newTransaction = {
+          ...cleanedTx,
+          id: data[0].id,
+        }
+        updatedTransactions = [...(budget.transactions || []), newTransaction]
+      }
+
+      const updatedBudget = { ...budget, transactions: updatedTransactions }
+      const updatedBudgets = budgets.map((b) => (b.id === budget.id ? updatedBudget : b))
+
+      setBudgets(updatedBudgets)
+      setSelectedBudget(updatedBudgets.find((b) => b.id === budget.id))
+      setShowModal(false)
+      setEditingTx(null)
+    } catch (error) {
+      console.error("Error saving transaction:", error)
+      alert("Failed to save transaction. Please try again.")
+    } finally {
+      setLoading(false)
     }
+  }
 
-    let updatedTransactions
-    if (editingTx) {
-      updatedTransactions = (budget.transactions || []).map((t) => (t.id === editingTx.id ? cleanedTx : t))
-    } else {
-      updatedTransactions = [...(budget.transactions || []), { ...cleanedTx, id: Date.now().toString() }]
+  const handleBudgetNameChange = async (newName) => {
+    try {
+      const { error } = await updateBudget(budget.id, {
+        name: newName,
+        categoryBudgets: budget.categoryBudgets,
+      })
+
+      if (error) {
+        console.error("Error updating budget name:", error)
+      } else {
+        const updatedBudgets = budgets.map((b) => (b.id === budget.id ? { ...b, name: newName } : b))
+        setBudgets(updatedBudgets)
+        setSelectedBudget(updatedBudgets.find((b) => b.id === budget.id))
+      }
+    } catch (error) {
+      console.error("Error updating budget name:", error)
     }
-
-    const updatedBudget = { ...budget, transactions: updatedTransactions }
-    const updatedBudgets = budgets.map((b) => (b.id === budget.id ? updatedBudget : b))
-
-    setBudgets(updatedBudgets)
-    setSelectedBudget(updatedBudgets.find((b) => b.id === budget.id))
-    setShowModal(false)
-    setEditingTx(null)
   }
 
   const toggleReceipt = (txId) => {
@@ -257,12 +308,7 @@ export default function BudgetDetailsScreen({
       <input
         className="input budget-title-input no-border"
         value={budget.name}
-        onChange={(e) => {
-          const newName = e.target.value
-          const updatedBudgets = budgets.map((b) => (b.id === budget.id ? { ...b, name: newName } : b))
-          setBudgets(updatedBudgets)
-          setSelectedBudget(updatedBudgets.find((b) => b.id === budget.id))
-        }}
+        onChange={(e) => handleBudgetNameChange(e.target.value)}
       />
 
       {/* Budget Overview Section */}
@@ -486,6 +532,7 @@ export default function BudgetDetailsScreen({
               placeholder="Description (e.g., Grocery shopping)"
               value={formTx.name}
               onChange={(e) => setFormTx({ ...formTx, name: e.target.value })}
+              disabled={loading}
             />
 
             <input
@@ -495,6 +542,7 @@ export default function BudgetDetailsScreen({
               step="0.01"
               value={formTx.amount}
               onChange={(e) => setFormTx({ ...formTx, amount: e.target.value })}
+              disabled={loading}
             />
 
             {formTx.type === "expense" && (
@@ -505,6 +553,7 @@ export default function BudgetDetailsScreen({
                 step="0.01"
                 value={formTx.budgetedAmount}
                 onChange={(e) => setFormTx({ ...formTx, budgetedAmount: e.target.value })}
+                disabled={loading}
               />
             )}
 
@@ -512,6 +561,7 @@ export default function BudgetDetailsScreen({
               className="input"
               value={formTx.category}
               onChange={(e) => setFormTx({ ...formTx, category: e.target.value })}
+              disabled={loading}
             >
               <option value="">Select Category</option>
               {categories[resolveTypeKey(formTx.type)]?.map((c) => (
@@ -538,6 +588,7 @@ export default function BudgetDetailsScreen({
                     reader.readAsDataURL(file)
                   }
                 }}
+                disabled={loading}
               />
               {formTx.receipt && (
                 <div className="receipt-preview">
@@ -550,6 +601,7 @@ export default function BudgetDetailsScreen({
                     type="button"
                     className="remove-receipt"
                     onClick={() => setFormTx({ ...formTx, receipt: null })}
+                    disabled={loading}
                   >
                     Remove
                   </button>
@@ -558,8 +610,8 @@ export default function BudgetDetailsScreen({
             </div>
 
             <div className="modal-actions">
-              <button className="addButton primary-button" onClick={saveTransaction}>
-                {editingTx ? "Update" : "Add"} Transaction
+              <button className="addButton primary-button" onClick={saveTransaction} disabled={loading}>
+                {loading ? "Saving..." : editingTx ? "Update" : "Add"} Transaction
               </button>
               <button
                 className="cancelButton secondary-button"
@@ -567,6 +619,7 @@ export default function BudgetDetailsScreen({
                   setShowModal(false)
                   setEditingTx(null)
                 }}
+                disabled={loading}
               >
                 Cancel
               </button>
