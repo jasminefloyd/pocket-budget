@@ -2346,6 +2346,15 @@ select.input {
     grid-template-columns: 1fr;
   }
 
+  .overview-stats {
+    display:flex;
+    justify-content: space-evenly;
+  }
+
+  .stat-item {
+    width: 100%;
+  }
+
   .compact-health-score {
     flex-direction: column;
     align-items: stretch;
