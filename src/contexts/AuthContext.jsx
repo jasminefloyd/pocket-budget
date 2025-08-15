@@ -1,5 +1,3 @@
-"use client"
-
 import { createContext, useContext, useEffect, useState } from "react"
 import { supabase, getCurrentUser, createUserProfile, getUserProfile } from "../lib/supabase-mock"
 

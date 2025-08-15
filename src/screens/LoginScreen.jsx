@@ -1,5 +1,3 @@
-"use client"
-
 import { useState } from "react"
 import { signIn, signUp, signInWithGoogle } from "../lib/supabase-mock"
 

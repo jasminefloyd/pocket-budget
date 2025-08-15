@@ -1,5 +1,3 @@
-"use client"
-
 import { useState } from "react"
 import { createBudget, updateBudget, deleteBudget } from "../lib/supabase-mock"
 

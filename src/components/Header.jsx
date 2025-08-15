@@ -1,5 +1,3 @@
-"use client"
-
 import { signOut } from "../lib/supabase-mock"
 import { useAuth } from "../contexts/AuthContext"
 
