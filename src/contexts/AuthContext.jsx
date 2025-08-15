@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react"
-import { supabase, getCurrentUser, createUserProfile, getUserProfile } from "../lib/supabase-mock"
+import { supabase, getCurrentUser, createUserProfile, getUserProfile } from "../lib/supabase"
 
 const AuthContext = createContext({})
 

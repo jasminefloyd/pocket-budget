@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { createBudget, updateBudget, deleteBudget } from "../lib/supabase-mock"
+import { createBudget, updateBudget, deleteBudget } from "../lib/supabase"
 
 export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode, setBudgets, userId }) {
   const [editingBudgetId, setEditingBudgetId] = useState(null)

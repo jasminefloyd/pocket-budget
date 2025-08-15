@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { signIn, signUp, signInWithGoogle } from "../lib/supabase-mock"
+import { signIn, signUp, signInWithGoogle } from "../lib/supabase"
 
 export default function LoginScreen() {
   const [isSignUp, setIsSignUp] = useState(false)

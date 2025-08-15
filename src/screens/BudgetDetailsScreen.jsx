@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { createTransaction, updateTransaction, updateBudget } from "../lib/supabase-mock"
+import { createTransaction, updateTransaction, updateBudget } from "../lib/supabase"
 
 export default function BudgetDetailsScreen({
   budget,
