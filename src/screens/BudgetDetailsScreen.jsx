@@ -250,7 +250,7 @@ export default function BudgetDetailsScreen({
           ← Back
         </button>
         <button className="ai-insights-button primary-button" onClick={() => setViewMode("ai")}>
-          🧠 AI Report
+          🧠 AI Finance Report
         </button>
       </div>
 
