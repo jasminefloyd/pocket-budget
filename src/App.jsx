@@ -34,14 +34,12 @@ function AppContent() {
   })
   const [selectedBudget, setSelectedBudget] = useState(null)
   const [viewMode, setViewMode] = useState("budgets")
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
 
   // Load user data when authenticated
   useEffect(() => {
-    if (user && !authLoading) {
+    if (user && !authLoading && !initializing) {
       loadUserData()
-    } else if (!user && !authLoading && !initializing) {
-      setIsLoading(false)
     }
   }, [user, authLoading, initializing])
 
@@ -102,9 +100,9 @@ function AppContent() {
     }
   }
 
-  // Show loading screen during initialization
+  // Show loading screen only during initial auth check (with timeout protection)
   if (initializing) {
-    return <LoadingScreen message="Initializing..." />
+    return <LoadingScreen message="Initializing" />
   }
 
   // Show login screen if not authenticated
@@ -117,9 +115,14 @@ function AppContent() {
     )
   }
 
-  // Show loading screen while loading user data
-  if (authLoading || isLoading) {
-    return <LoadingScreen message="Loading your data..." />
+  // Show loading screen while loading user data (only after auth is confirmed)
+  if (user && isLoading) {
+    return <LoadingScreen message="Loading your data" />
+  }
+
+  // If we have a user but still loading auth, show a brief loading state
+  if (authLoading && user) {
+    return <LoadingScreen message="Setting up your account" />
   }
 
   return (

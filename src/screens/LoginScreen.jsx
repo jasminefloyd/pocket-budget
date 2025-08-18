@@ -1,3 +1,5 @@
+"use client"
+
 import { useState } from "react"
 import { signIn, signUp, signInWithGoogle } from "../lib/supabase"
 
@@ -33,7 +35,6 @@ export default function LoginScreen() {
           setError(error.message)
         } else {
           setError("")
-          alert("Account created successfully! You can now sign in.")
           setIsSignUp(false)
           setPassword("")
           setConfirmPassword("")
@@ -69,6 +70,12 @@ export default function LoginScreen() {
     }
   }
 
+  const handleDemoLogin = () => {
+    setEmail("test@me.com")
+    setPassword("pass123")
+    setIsSignUp(false)
+  }
+
   return (
     <div className="login-container">
       <div className="login-content">
@@ -81,6 +88,22 @@ export default function LoginScreen() {
 
         <div className="login-form-container">
           {error && <div className="error-message">{error}</div>}
+
+          {/* Demo Login Button
+          <button
+            onClick={handleDemoLogin}
+            className="google-button"
+            style={{
+              background: "linear-gradient(135deg, #0ea5e9, #8b5cf6)",
+              color: "white",
+              border: "none",
+              marginBottom: "1rem",
+            }}
+            disabled={loading}
+          >
+            🎯 Demo Login (test@me.com)
+          </button>
+           */}
 
           <form onSubmit={handleEmailAuth} className="login-form">
             <input

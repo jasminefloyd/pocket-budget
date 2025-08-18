@@ -1,3 +1,5 @@
+"use client"
+
 import { useState } from "react"
 import { createBudget, updateBudget, deleteBudget } from "../lib/supabase"
 
@@ -16,7 +18,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
     setLoading(true)
     try {
       const newBudgetData = {
-        name: `Budget ${budgets.length + 1}`,
+        name: `My Budget`,
         categoryBudgets: [],
       }
 
@@ -121,142 +123,19 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
     }
   }
 
-  const fillDemoData = (budget) => {
-    const demoTransactions = [
-      // Income transactions
-      { id: "demo-i1", name: "Monthly Salary", amount: 4500, category: "Salary", date: "1/1/2025", type: "income" },
-      {
-        id: "demo-i2",
-        name: "Freelance Project",
-        amount: 800,
-        category: "Freelance",
-        date: "1/15/2025",
-        type: "income",
-      },
-      {
-        id: "demo-i3",
-        name: "Investment Dividend",
-        amount: 120,
-        category: "Investment",
-        date: "1/10/2025",
-        type: "income",
-      },
-
-      // Expense transactions
-      { id: "demo-e1", name: "Monthly Rent", amount: 1200, category: "Bills", date: "1/1/2025", type: "expense" },
-      { id: "demo-e2", name: "Grocery Shopping", amount: 85, category: "Groceries", date: "1/3/2025", type: "expense" },
-      { id: "demo-e3", name: "Electric Bill", amount: 120, category: "Bills", date: "1/5/2025", type: "expense" },
-      { id: "demo-e4", name: "Gas Station", amount: 45, category: "Transportation", date: "1/6/2025", type: "expense" },
-      {
-        id: "demo-e5",
-        name: "Netflix Subscription",
-        amount: 15,
-        category: "Entertainment",
-        date: "1/8/2025",
-        type: "expense",
-      },
-      { id: "demo-e6", name: "Lunch at Cafe", amount: 28, category: "Groceries", date: "1/9/2025", type: "expense" },
-      {
-        id: "demo-e7",
-        name: "Grocery Shopping",
-        amount: 92,
-        category: "Groceries",
-        date: "1/11/2025",
-        type: "expense",
-      },
-      { id: "demo-e8", name: "Phone Bill", amount: 65, category: "Bills", date: "1/12/2025", type: "expense" },
-      {
-        id: "demo-e9",
-        name: "Movie Tickets",
-        amount: 24,
-        category: "Entertainment",
-        date: "1/13/2025",
-        type: "expense",
-      },
-      {
-        id: "demo-e10",
-        name: "Gas Station",
-        amount: 38,
-        category: "Transportation",
-        date: "1/14/2025",
-        type: "expense",
-      },
-      {
-        id: "demo-e11",
-        name: "Online Shopping",
-        amount: 156,
-        category: "Shopping",
-        date: "1/16/2025",
-        type: "expense",
-      },
-      { id: "demo-e12", name: "Internet Bill", amount: 75, category: "Bills", date: "1/17/2025", type: "expense" },
-      { id: "demo-e13", name: "Dinner Out", amount: 67, category: "Groceries", date: "1/18/2025", type: "expense" },
-      {
-        id: "demo-e14",
-        name: "Grocery Shopping",
-        amount: 78,
-        category: "Groceries",
-        date: "1/19/2025",
-        type: "expense",
-      },
-      {
-        id: "demo-e15",
-        name: "Gym Membership",
-        amount: 45,
-        category: "Entertainment",
-        date: "1/20/2025",
-        type: "expense",
-      },
-      { id: "demo-e16", name: "Coffee Shop", amount: 12, category: "Groceries", date: "1/21/2025", type: "expense" },
-      { id: "demo-e17", name: "Uber Ride", amount: 18, category: "Transportation", date: "1/22/2025", type: "expense" },
-      { id: "demo-e18", name: "Clothing Store", amount: 89, category: "Shopping", date: "1/23/2025", type: "expense" },
-      {
-        id: "demo-e19",
-        name: "Grocery Shopping",
-        amount: 103,
-        category: "Groceries",
-        date: "1/25/2025",
-        type: "expense",
-      },
-      {
-        id: "demo-e20",
-        name: "Gas Station",
-        amount: 42,
-        category: "Transportation",
-        date: "1/26/2025",
-        type: "expense",
-      },
-    ]
-
-    const updatedBudget = {
-      ...budget,
-      transactions: demoTransactions,
-      categoryBudgets: [
-        { category: "Groceries", budgetedAmount: 400 },
-        { category: "Bills", budgetedAmount: 1500 },
-        { category: "Transportation", budgetedAmount: 200 },
-        { category: "Entertainment", budgetedAmount: 150 },
-        { category: "Shopping", budgetedAmount: 300 },
-      ],
-    }
-
-    const updatedBudgets = budgets.map((b) => (b.id === budget.id ? updatedBudget : b))
-    setBudgets(updatedBudgets)
-  }
-
   return (
     <div>
       <div className="header-section">
         <p className="tagline">Manage your budgets and stay on top of your finances.</p>
-        <div className="demo-notice">
-          <p>
-            🧪 <strong>Demo Mode:</strong> All data is stored locally in your browser
-          </p>
-        </div>
       </div>
 
       {budgets.length === 0 ? (
-        <p className="empty-state">No budgets found. Create one to get started!</p>
+        <div className="empty-state">
+          <p>Welcome to Pocket Budget! Create your first budget to get started.</p>
+          <button className="primary-button" onClick={createNewBudget} disabled={loading}>
+            {loading ? "Creating..." : "Create Your First Budget"}
+          </button>
+        </div>
       ) : (
         budgets.map((budget) => {
           const totalIncome = (budget.transactions || [])
@@ -282,7 +161,6 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
           })
 
           const isAnyCategoryOver = categorySummaries.some((cat) => cat.isOver)
-          const hasMinimalData = (budget.transactions || []).length <= 3
 
           return (
             <div key={budget.id} className="budgetCard">
@@ -325,20 +203,6 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
                   </div>
 
                   <div className="budgetDate">Created: {budget.createdAt}</div>
-
-                  {/* Fill Data Button for budgets with minimal data */}
-                  {hasMinimalData && (
-                    <button
-                      className="fill-data-button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        fillDemoData(budget)
-                      }}
-                      disabled={loading}
-                    >
-                      📊 Fill with Demo Data
-                    </button>
-                  )}
 
                   {categorySummaries.length > 0 && (
                     <div className="category-budgets">
@@ -419,14 +283,16 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
         })
       )}
 
-      <div className="budget-actions">
-        <button className="addButton primary-button" onClick={createNewBudget} disabled={loading}>
-          {loading ? "Creating..." : "Create New Budget"}
-        </button>
-        <button className="cancelButton secondary-button cate-btn" onClick={() => setViewMode("categories")}>
-          Manage Categories
-        </button>
-      </div>
+      {budgets.length > 0 && (
+        <div className="budget-actions">
+          <button className="addButton primary-button" onClick={createNewBudget} disabled={loading}>
+            {loading ? "Creating..." : "Create New Budget"}
+          </button>
+          <button className="cancelButton secondary-button cate-btn" onClick={() => setViewMode("categories")}>
+            Manage Categories
+          </button>
+        </div>
+      )}
     </div>
   )
 }

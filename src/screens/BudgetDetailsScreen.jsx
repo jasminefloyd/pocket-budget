@@ -1,3 +1,5 @@
+"use client"
+
 import { useState } from "react"
 import { createTransaction, updateTransaction, updateBudget } from "../lib/supabase"
 
@@ -39,10 +41,10 @@ export default function BudgetDetailsScreen({
   const openAddModal = (preset = {}, typeArg) => {
     const resolvedType = resolveTypeKey(typeArg || tab)
     setFormTx({
-      name: preset.name || "",
-      amount: preset.amount || "",
-      budgetedAmount: preset.budgetedAmount || "",
-      category: preset.category || "",
+      name: "",
+      amount: "",
+      budgetedAmount: "",
+      category: "",
       date: new Date().toLocaleDateString(),
       type: resolvedType,
       receipt: null,
@@ -307,6 +309,7 @@ export default function BudgetDetailsScreen({
         className="input budget-title-input no-border"
         value={budget.name}
         onChange={(e) => handleBudgetNameChange(e.target.value)}
+        placeholder="Budget Name"
       />
 
       {/* Budget Overview Section */}
@@ -527,7 +530,7 @@ export default function BudgetDetailsScreen({
 
             <input
               className="input"
-              placeholder="Description (e.g., Grocery shopping)"
+              placeholder="Description"
               value={formTx.name}
               onChange={(e) => setFormTx({ ...formTx, name: e.target.value })}
               disabled={loading}
@@ -535,7 +538,7 @@ export default function BudgetDetailsScreen({
 
             <input
               className="input"
-              placeholder="Actual amount spent"
+              placeholder="Amount"
               type="number"
               step="0.01"
               value={formTx.amount}
