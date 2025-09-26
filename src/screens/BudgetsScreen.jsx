@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { createBudget, updateBudget, deleteBudget } from "../lib/supabase"
+import { getBudgetPacing, GUARDRAIL_LABELS, normalizeGuardKey } from "../lib/pacing"
 
 export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode, setBudgets, userId }) {
   const [editingBudgetId, setEditingBudgetId] = useState(null)
@@ -148,55 +149,69 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
 
           const balance = totalIncome - totalExpenses
 
-          // Category budget summaries
+          const pacing = getBudgetPacing(budget)
+          const overallStatus = normalizeGuardKey(pacing.overall.status)
+          const overallLabel = GUARDRAIL_LABELS[overallStatus]
+
           const categorySummaries = (budget.categoryBudgets || []).map((cat) => {
-            const actual = (budget.transactions || [])
-              .filter(
-                (t) => t.type === "expense" && t.category.toLowerCase().trim() === cat.category.toLowerCase().trim(),
-              )
-              .reduce((sum, t) => sum + t.amount, 0)
+            const budgetedAmount = Number(cat.budgetedAmount) || 0
+            const categoryPacing = pacing.categories[cat.category] || {
+              status: "green",
+              actual: 0,
+              expected: 0,
+            }
 
-            const isOver = actual > cat.budgetedAmount
-            return { ...cat, actual, isOver }
+            const status = normalizeGuardKey(categoryPacing.status)
+
+            return {
+              ...cat,
+              status,
+              actual: categoryPacing.actual ?? 0,
+              expected: categoryPacing.expected ?? 0,
+              budgetedAmount,
+            }
           })
-
-          const isAnyCategoryOver = categorySummaries.some((cat) => cat.isOver)
 
           return (
             <div key={budget.id} className="budgetCard">
               <div className="budgetCard-content">
                 <div className="budgetCard-info" onClick={() => openBudget(budget)}>
-                  {editingBudgetId === budget.id ? (
-                    <input
-                      className="input budget-name-input"
-                      value={budgetNameInput}
-                      onChange={(e) => setBudgetNameInput(e.target.value)}
-                      onBlur={() => saveBudgetName(budget)}
-                      onKeyPress={(e) => {
-                        if (e.key === "Enter") {
-                          saveBudgetName(budget)
-                        }
-                      }}
-                      autoFocus
-                      disabled={loading}
-                    />
-                  ) : (
-                    <div
-                      className="budgetName"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setEditingBudgetId(budget.id)
-                        setBudgetNameInput(budget.name)
-                      }}
+                  <div className="budget-card-header">
+                    {editingBudgetId === budget.id ? (
+                      <input
+                        className="input budget-name-input"
+                        value={budgetNameInput}
+                        onChange={(e) => setBudgetNameInput(e.target.value)}
+                        onBlur={() => saveBudgetName(budget)}
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter") {
+                            saveBudgetName(budget)
+                          }
+                        }}
+                        autoFocus
+                        disabled={loading}
+                      />
+                    ) : (
+                      <div
+                        className="budgetName"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEditingBudgetId(budget.id)
+                          setBudgetNameInput(budget.name)
+                        }}
+                      >
+                        {budget.name}
+                      </div>
+                    )}
+
+                    <span
+                      className={`guard-pill guard-pill--${overallStatus}`}
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      {budget.name}
-                      {isAnyCategoryOver && (
-                        <span className="expense" style={{ marginLeft: "0.5rem" }}>
-                          🚩
-                        </span>
-                      )}
-                    </div>
-                  )}
+                      <span className={`guard-dot guard-dot--${overallStatus}`}></span>
+                      {overallLabel}
+                    </span>
+                  </div>
 
                   <div className="budgetBalance">
                     Balance: <span className={balance >= 0 ? "income" : "expense"}>${balance.toFixed(2)}</span>
@@ -208,22 +223,26 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
                     <div className="category-budgets">
                       {categorySummaries.slice(0, 3).map((cat) => (
                         <div key={cat.category} className="category-budget-row">
-                          <div className="category-budget-name">
-                            {cat.category}
-                            {cat.isOver && (
-                              <span className="expense" style={{ marginLeft: "0.3rem" }}>
-                                ⚠
-                              </span>
-                            )}
+                          <div className="category-budget-header">
+                            <div className="category-budget-name">{cat.category}</div>
+                            <div className={`category-budget-status category-budget-status--${cat.status}`}>
+                              <span className={`guard-dot guard-dot--${cat.status}`}></span>
+                              {GUARDRAIL_LABELS[cat.status]}
+                            </div>
                           </div>
                           <div className="category-budget-amounts">
                             ${cat.actual.toFixed(2)} / ${cat.budgetedAmount.toFixed(2)}
                           </div>
+                          <div className="category-budget-expected">Expected so far: ${cat.expected.toFixed(2)}</div>
                           <div className="progress-bar">
                             <div
-                              className={`progress-fill ${cat.isOver ? "over" : ""}`}
+                              className={`progress-fill progress-fill--${cat.status}`}
                               style={{
-                                width: `${Math.min((cat.actual / cat.budgetedAmount) * 100, 100)}%`,
+                                width: `${
+                                  cat.budgetedAmount > 0
+                                    ? Math.min((cat.actual / cat.budgetedAmount) * 100, 100)
+                                    : 0
+                                }%`,
                               }}
                             ></div>
                           </div>

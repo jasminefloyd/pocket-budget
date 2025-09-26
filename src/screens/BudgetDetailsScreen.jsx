@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { createTransaction, updateTransaction, updateBudget } from "../lib/supabase"
+import { getBudgetPacing, GUARDRAIL_LABELS, normalizeGuardKey } from "../lib/pacing"
 
 export default function BudgetDetailsScreen({
   budget,
@@ -156,6 +157,9 @@ export default function BudgetDetailsScreen({
     .reduce((sum, t) => sum + t.budgetedAmount, 0)
 
   const balance = totalIncome - totalExpenses
+
+  const pacing = getBudgetPacing(budget)
+  const overallStatus = normalizeGuardKey(pacing.overall.status)
 
   // Calculate category breakdown for pie chart
   const categoryBreakdown = (budget.transactions || [])
@@ -314,7 +318,13 @@ export default function BudgetDetailsScreen({
 
       {/* Budget Overview Section */}
       <div className="budget-overview-card">
-        <h3 className="overview-title">Budget Overview</h3>
+        <div className="overview-header">
+          <h3 className="overview-title">Budget Overview</h3>
+          <span className={`guard-pill guard-pill--${overallStatus}`}>
+            <span className={`guard-dot guard-dot--${overallStatus}`}></span>
+            {GUARDRAIL_LABELS[overallStatus]}
+          </span>
+        </div>
 
         <div className="overview-content">
           <div className="overview-stats">
@@ -460,6 +470,52 @@ export default function BudgetDetailsScreen({
           </div>
         </div>
       </div>
+
+      {(budget.categoryBudgets || []).length > 0 && (
+        <div className="category-guardrail-section">
+          <h3 className="section-title">Category Guardrails</h3>
+          <div className="category-guardrail-list">
+            {budget.categoryBudgets.map((cat) => {
+              const categoryPacing = pacing.categories[cat.category] || {
+                status: "green",
+                actual: 0,
+                expected: 0,
+              }
+
+              const status = normalizeGuardKey(categoryPacing.status)
+              const actual = categoryPacing.actual ?? 0
+              const expected = categoryPacing.expected ?? 0
+              const budgetedAmount = Number(cat.budgetedAmount) || 0
+              const progressPercent =
+                budgetedAmount > 0 ? Math.min((actual / budgetedAmount) * 100, 100) : 0
+
+              return (
+                <div key={cat.category} className="category-guardrail-row">
+                  <div className="category-guardrail-row-header">
+                    <div className="category-guardrail-name">{cat.category}</div>
+                    <div className={`category-guardrail-status category-guardrail-status--${status}`}>
+                      <span className={`guard-dot guard-dot--${status}`}></span>
+                      {GUARDRAIL_LABELS[status]}
+                    </div>
+                  </div>
+                  <div className="category-guardrail-figures">
+                    <span className="category-guardrail-actual">${actual.toFixed(2)}</span>
+                    <span className="category-guardrail-divider">/</span>
+                    <span className="category-guardrail-budget">${budgetedAmount.toFixed(2)}</span>
+                  </div>
+                  <div className="category-guardrail-expected">Expected so far: ${expected.toFixed(2)}</div>
+                  <div className="progress-bar">
+                    <div
+                      className={`progress-fill progress-fill--${status}`}
+                      style={{ width: `${progressPercent}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Transaction Tabs and List */}
       <div className="transactions-section">
