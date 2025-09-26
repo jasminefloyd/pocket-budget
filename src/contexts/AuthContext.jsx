@@ -7,6 +7,21 @@ import { createUserProfile, getCurrentUser, getUserProfile, supabase } from "../
 const AuthContext = createContext(undefined)
 
 const SESSION_TIMEOUT_MS = 10000
+const PROFILE_TIMEOUT_MS = 10000
+
+const createTimeoutError = (message) => {
+  const error = new Error(message)
+  error.name = "TimeoutError"
+  return error
+}
+
+const withProfileTimeout = (promise, message) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(createTimeoutError(message)), PROFILE_TIMEOUT_MS),
+    ),
+  ])
 
 export function useAuth() {
   const context = useContext(AuthContext)
@@ -44,16 +59,21 @@ export function AuthProvider({ children }) {
         return
       }
 
+      let shouldFinalize = true
+      let finalizeStatus = "ready"
+
       try {
         setStatus("loading-profile")
-        const { data, error } = await getUserProfile(sessionUser.id)
+        const { data, error } = await withProfileTimeout(
+          getUserProfile(sessionUser.id),
+          "Profile lookup timed out",
+        )
 
         if (error && error.code === "PGRST116") {
           const fullName = sessionUser.user_metadata?.full_name || sessionUser.email
-          const { data: newProfile, error: createError } = await createUserProfile(
-            sessionUser.id,
-            sessionUser.email,
-            fullName,
+          const { data: newProfile, error: createError } = await withProfileTimeout(
+            createUserProfile(sessionUser.id, sessionUser.email, fullName),
+            "Profile creation timed out",
           )
 
           if (createError) {
@@ -74,11 +94,26 @@ export function AuthProvider({ children }) {
 
         applyProfile(data)
       } catch (profileError) {
+        if (profileError?.name === "TimeoutError") {
+          console.warn(
+            "Supabase did not respond in time while loading the profile. Falling back to signed-out state.",
+            profileError,
+          )
+          applyProfile(null)
+          safeSetState(() => setLoading(false))
+          setStatus("profile-timeout")
+          shouldFinalize = false
+          finalizeStatus = "profile-timeout"
+          return
+        }
+
         console.error("Unexpected profile error", profileError)
         applyProfile(null)
       } finally {
-        safeSetState(() => setLoading(false))
-        setStatus("ready")
+        if (shouldFinalize) {
+          safeSetState(() => setLoading(false))
+          setStatus(finalizeStatus)
+        }
       }
     },
     [applyProfile, safeSetState],
