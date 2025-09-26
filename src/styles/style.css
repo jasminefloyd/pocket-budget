@@ -1613,6 +1613,12 @@ body {
   animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.modal-subtitle {
+  margin: 0.35rem 0 0;
+  color: var(--gray-600);
+  font-size: 0.95rem;
+}
+
 @keyframes slideUp {
   from {
     opacity: 0;
@@ -1634,6 +1640,149 @@ body {
 .modal-actions .cancelButton {
   flex: 1;
   margin: 0;
+}
+
+.budgetCard-headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.budgetNameWrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.budgetCycleLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--gray-700);
+  background: var(--gray-100);
+  border-radius: var(--radius-full);
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--gray-200);
+  white-space: nowrap;
+}
+
+.budgetCycleLabel.locked {
+  color: var(--purple-700);
+  background: rgba(109, 40, 217, 0.12);
+  border-color: rgba(109, 40, 217, 0.25);
+}
+
+.cycleLockIcon {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.createBudgetModal {
+  max-width: 420px;
+}
+
+.cycleOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.cycleOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--gray-200);
+  background: var(--gray-50);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+  gap: 0.75rem;
+}
+
+.cycleOption:hover:not(.locked) {
+  border-color: var(--primary-500);
+  box-shadow: var(--shadow-sm);
+  background: white;
+}
+
+.cycleOption.selected {
+  border-color: var(--primary-600);
+  background: white;
+  box-shadow: var(--shadow-md);
+}
+
+.cycleOption.locked {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.cycleOption-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.cycleOption-label {
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--gray-900);
+}
+
+.cycleOption-description {
+  font-size: 0.85rem;
+  color: var(--gray-600);
+}
+
+.cycleOption-selected {
+  font-weight: 700;
+  color: var(--primary-600);
+  font-size: 1.1rem;
+}
+
+.cycleSettingsRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.cycleSettingsLabel {
+  font-weight: 600;
+  color: var(--gray-700);
+  font-size: 0.9rem;
+}
+
+.upgradeCta {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(109, 40, 217, 0.08);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(109, 40, 217, 0.2);
+  text-align: center;
+  color: var(--purple-700);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.upgradeCta-link {
+  color: var(--primary-600);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.upgradeCta-link:hover {
+  text-decoration: underline;
 }
 /* Chart styles */
 .chartContainer {

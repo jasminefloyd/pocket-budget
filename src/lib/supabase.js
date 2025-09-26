@@ -199,11 +199,16 @@ export const getBudgets = async (userId) => {
 export const createBudget = async (userId, budgetData) => {
   // For demo admin, store in memory
   if (userId === DEMO_ADMIN.user.id) {
+    const cycleType = budgetData.cycleType || "monthly"
+    const cycleSettings =
+      budgetData.cycleSettings === undefined ? null : budgetData.cycleSettings
     const newBudget = {
       id: `demo-budget-${Date.now()}`,
       user_id: userId,
       name: budgetData.name,
       category_budgets: budgetData.categoryBudgets || [],
+      cycle_type: cycleType,
+      cycle_settings: cycleSettings,
       created_at: new Date().toISOString(),
       transactions: [],
     }
@@ -218,6 +223,9 @@ export const createBudget = async (userId, budgetData) => {
         user_id: userId,
         name: budgetData.name,
         category_budgets: budgetData.categoryBudgets || [],
+        cycle_type: budgetData.cycleType || "monthly",
+        cycle_settings:
+          budgetData.cycleSettings === undefined ? null : budgetData.cycleSettings,
         created_at: new Date().toISOString(),
       },
     ])
@@ -230,22 +238,44 @@ export const updateBudget = async (budgetId, budgetData) => {
   if (budgetId.startsWith("demo-budget-")) {
     const budgetIndex = demoBudgets.findIndex((b) => b.id === budgetId)
     if (budgetIndex !== -1) {
-      demoBudgets[budgetIndex] = {
+      const updatedBudget = {
         ...demoBudgets[budgetIndex],
         name: budgetData.name,
         category_budgets: budgetData.categoryBudgets || [],
       }
+
+      if (Object.prototype.hasOwnProperty.call(budgetData, "cycleType")) {
+        updatedBudget.cycle_type = budgetData.cycleType
+      }
+
+      if (Object.prototype.hasOwnProperty.call(budgetData, "cycleSettings")) {
+        updatedBudget.cycle_settings =
+          budgetData.cycleSettings === undefined ? null : budgetData.cycleSettings
+      }
+
+      demoBudgets[budgetIndex] = updatedBudget
       return { data: [demoBudgets[budgetIndex]], error: null }
     }
     return { data: null, error: { message: "Budget not found" } }
   }
 
+  const updates = {
+    name: budgetData.name,
+    category_budgets: budgetData.categoryBudgets || [],
+  }
+
+  if (Object.prototype.hasOwnProperty.call(budgetData, "cycleType")) {
+    updates.cycle_type = budgetData.cycleType
+  }
+
+  if (Object.prototype.hasOwnProperty.call(budgetData, "cycleSettings")) {
+    updates.cycle_settings =
+      budgetData.cycleSettings === undefined ? null : budgetData.cycleSettings
+  }
+
   const { data, error } = await supabase
     .from("budgets")
-    .update({
-      name: budgetData.name,
-      category_budgets: budgetData.categoryBudgets || [],
-    })
+    .update(updates)
     .eq("id", budgetId)
     .select()
   return { data, error }

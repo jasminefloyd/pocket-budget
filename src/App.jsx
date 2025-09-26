@@ -59,6 +59,8 @@ function AppContent() {
             name: budget.name,
             createdAt: new Date(budget.created_at).toLocaleDateString(),
             categoryBudgets: budget.category_budgets || [],
+            cycleType: budget.cycle_type || "monthly",
+            cycleSettings: budget.cycle_settings ?? null,
             transactions:
               budget.transactions?.map((tx) => ({
                 id: tx.id,
