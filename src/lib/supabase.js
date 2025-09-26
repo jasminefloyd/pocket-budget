@@ -33,6 +33,7 @@ const DEMO_ADMIN = {
     email: "test@me.com",
     full_name: "Demo Admin",
     created_at: new Date().toISOString(),
+    plan_tier: "free",
   },
 }
 
@@ -178,6 +179,7 @@ let demoCategories = {
     { name: "Shopping", icon: "🛍️" },
   ],
 }
+let demoAIDismissals = {}
 
 export const getBudgets = async (userId) => {
   // For demo admin, return in-memory data
@@ -391,4 +393,77 @@ export const updateUserCategories = async (userId, categories) => {
     ])
     .select()
   return { data, error }
+}
+
+const ensureDemoDismissalsBucket = (userId) => {
+  if (!demoAIDismissals[userId]) {
+    demoAIDismissals[userId] = {}
+  }
+  return demoAIDismissals[userId]
+}
+
+export const getAIDismissedItems = async (userId, cycleId) => {
+  if (userId === DEMO_ADMIN.user.id) {
+    const userBucket = ensureDemoDismissalsBucket(userId)
+    const cycleSet = userBucket[cycleId] || new Set()
+    return { data: Array.from(cycleSet), error: null }
+  }
+
+  const { data, error } = await supabase
+    .from("ai_dismissals")
+    .select("item_id")
+    .eq("user_id", userId)
+    .eq("cycle_id", cycleId)
+
+  return { data: data?.map((record) => record.item_id) ?? [], error }
+}
+
+export const saveAIDismissal = async (userId, cycleId, itemId) => {
+  if (userId === DEMO_ADMIN.user.id) {
+    const userBucket = ensureDemoDismissalsBucket(userId)
+    if (!userBucket[cycleId]) {
+      userBucket[cycleId] = new Set()
+    }
+    userBucket[cycleId].add(itemId)
+    return { data: [{ item_id: itemId }], error: null }
+  }
+
+  const { data, error } = await supabase
+    .from("ai_dismissals")
+    .upsert(
+      [
+        {
+          user_id: userId,
+          cycle_id: cycleId,
+          item_id: itemId,
+          dismissed_at: new Date().toISOString(),
+        },
+      ],
+      {
+        onConflict: "user_id,cycle_id,item_id",
+      },
+    )
+    .select()
+
+  return { data, error }
+}
+
+export const removeAIDismissal = async (userId, cycleId, itemId) => {
+  if (userId === DEMO_ADMIN.user.id) {
+    const userBucket = ensureDemoDismissalsBucket(userId)
+    const cycleSet = userBucket[cycleId]
+    if (cycleSet) {
+      cycleSet.delete(itemId)
+    }
+    return { error: null }
+  }
+
+  const { error } = await supabase
+    .from("ai_dismissals")
+    .delete()
+    .eq("user_id", userId)
+    .eq("cycle_id", cycleId)
+    .eq("item_id", itemId)
+
+  return { error }
 }

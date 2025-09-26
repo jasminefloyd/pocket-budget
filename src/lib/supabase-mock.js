@@ -291,6 +291,7 @@ export const createUserProfile = async (userId, email, fullName) => {
     email,
     full_name: fullName,
     created_at: new Date().toISOString(),
+    plan_tier: "free",
   }
   localStorage.setItem(`user_profiles_${userId}`, JSON.stringify(profile))
   return { data: [profile], error: null }
@@ -415,4 +416,48 @@ export const updateUserCategories = async (userId, categories) => {
   const categoryData = { user_id: userId, categories }
   localStorage.setItem(`user_categories_${userId}`, JSON.stringify(categoryData))
   return { data: [categoryData], error: null }
+}
+
+const dismissalStorageKey = (userId) => `ai_dismissals_${userId}`
+
+const readDismissals = (userId) => {
+  const raw = localStorage.getItem(dismissalStorageKey(userId))
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    return typeof parsed === "object" && parsed !== null ? parsed : {}
+  } catch (error) {
+    console.warn("Failed to parse dismissal cache, resetting", error)
+    return {}
+  }
+}
+
+const writeDismissals = (userId, dismissals) => {
+  localStorage.setItem(dismissalStorageKey(userId), JSON.stringify(dismissals))
+}
+
+export const getAIDismissedItems = async (userId, cycleId) => {
+  await delay(100)
+  const dismissals = readDismissals(userId)
+  return { data: dismissals[cycleId] || [], error: null }
+}
+
+export const saveAIDismissal = async (userId, cycleId, itemId) => {
+  await delay(100)
+  const dismissals = readDismissals(userId)
+  const cycleItems = new Set(dismissals[cycleId] || [])
+  cycleItems.add(itemId)
+  dismissals[cycleId] = Array.from(cycleItems)
+  writeDismissals(userId, dismissals)
+  return { data: [{ item_id: itemId }], error: null }
+}
+
+export const removeAIDismissal = async (userId, cycleId, itemId) => {
+  await delay(100)
+  const dismissals = readDismissals(userId)
+  const cycleItems = new Set(dismissals[cycleId] || [])
+  cycleItems.delete(itemId)
+  dismissals[cycleId] = Array.from(cycleItems)
+  writeDismissals(userId, dismissals)
+  return { error: null }
 }

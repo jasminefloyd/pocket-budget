@@ -1,21 +1,45 @@
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useAuth } from "../contexts/AuthContext"
+import {
+  getAIInsights,
+  getDismissedInsightIds,
+  dismissInsightForCycle,
+  restoreInsightForCycle,
+} from "../lib/aiInsights"
+
+const formatCurrency = (value) => `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+
+const formatCycleLabel = (cycleId) => {
+  if (!cycleId) return "this cycle"
+  const [year, month] = cycleId.split("-")
+  const date = new Date(Number(year), Number(month) - 1, 1)
+  return date.toLocaleString(undefined, { month: "long", year: "numeric" })
+}
+
+const FREE_PLAN = "free"
+
+const isPaidPlan = (plan) => plan && plan.toLowerCase() !== FREE_PLAN
 
 export default function AIInsightsScreen({ budget, setViewMode }) {
+  const { user } = useAuth()
   const [insights, setInsights] = useState(null)
+  const [plan, setPlan] = useState(FREE_PLAN)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState(null)
+  const [generatedAt, setGeneratedAt] = useState(null)
+  const [cached, setCached] = useState(false)
+  const [cycleId, setCycleId] = useState(null)
+  const [dismissedIds, setDismissedIds] = useState(new Set())
+  const [recentDismissal, setRecentDismissal] = useState(null)
 
-  // Calculate financial metrics
   const calculateMetrics = () => {
     const transactions = budget.transactions || []
     const totalIncome = transactions.filter((t) => t.type === "income").reduce((sum, t) => sum + t.amount, 0)
-
     const totalExpenses = transactions.filter((t) => t.type === "expense").reduce((sum, t) => sum + t.amount, 0)
-
     const balance = totalIncome - totalExpenses
     const savingsRate = totalIncome > 0 ? (balance / totalIncome) * 100 : 0
 
-    // Category breakdown
     const expensesByCategory = {}
     transactions
       .filter((t) => t.type === "expense")
@@ -25,7 +49,6 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
 
     const topExpenseCategory = Object.entries(expensesByCategory).sort(([, a], [, b]) => b - a)[0]
 
-    // Recent spending trend (last 7 days vs previous 7 days)
     const now = new Date()
     const last7Days = transactions
       .filter((t) => {
@@ -57,258 +80,130 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
     }
   }
 
-  // Generate AI insights
-  const generateAIInsights = async () => {
-    try {
-      setLoading(true)
-      const metrics = calculateMetrics()
+  const findInsightLabel = (itemId) => {
+    if (!insights) return ""
+    if (insights.summary.id === itemId) return "Summary"
 
-      // Simulate AI response (replace with actual AI SDK call)
-      const response = await simulateAIResponse(metrics)
-      setInsights(response)
+    const collections = [
+      insights.strengths,
+      insights.improvements,
+      insights.spendingAnalysis,
+      insights.savingsTips,
+      insights.budgetSuggestions,
+      insights.goals.shortTerm,
+      insights.goals.longTerm,
+    ]
+
+    for (const collection of collections) {
+      const match = collection?.find((item) => item.id === itemId)
+      if (match) {
+        return match.area || match.rule || match.category || match.text || "Insight"
+      }
+    }
+
+    return "Insight"
+  }
+
+  const loadInsights = async ({ forceRefresh = false } = {}) => {
+    if (!user) {
+      setError("You need to be signed in to view AI insights.")
+      setLoading(false)
+      return
+    }
+
+    try {
+      if (forceRefresh) {
+        setRefreshing(true)
+      } else {
+        setLoading(true)
+      }
       setError(null)
+
+      const metrics = calculateMetrics()
+      const { plan: planTier, insights: aiInsights, generatedAt, cached, cycleId } = await getAIInsights({
+        userId: user.id,
+        metrics,
+        forceRefresh,
+      })
+
+      const dismissed = await getDismissedInsightIds(user.id, cycleId)
+
+      setPlan(planTier || FREE_PLAN)
+      setInsights(aiInsights)
+      setGeneratedAt(generatedAt)
+      setCached(cached)
+      setCycleId(cycleId)
+      setDismissedIds(new Set(dismissed))
     } catch (err) {
-      setError("Failed to generate AI insights. Please try again.")
       console.error("AI Insights Error:", err)
+      setError("Failed to generate AI insights. Please try again.")
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }
-
-  // Simulate AI response (replace with actual AI SDK integration)
-  const simulateAIResponse = async (metrics) => {
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-
-    // Generate realistic insights based on the data
-    const healthScore = calculateHealthScore(metrics)
-    const spendingTrend = metrics.last7Days > metrics.previous7Days ? "increasing" : "decreasing"
-    const topCategory = metrics.topExpenseCategory?.[0] || "Unknown"
-    const topCategoryAmount = metrics.topExpenseCategory?.[1] || 0
-    const topCategoryPercentage = metrics.totalExpenses > 0 ? (topCategoryAmount / metrics.totalExpenses) * 100 : 0
-
-    return {
-      healthScore,
-      summary: generateSummary(metrics, healthScore),
-      strengths: generateStrengths(metrics),
-      improvements: generateImprovements(metrics),
-      spendingAnalysis: generateSpendingAnalysis(metrics, spendingTrend, topCategory, topCategoryPercentage),
-      savingsTips: generateSavingsTips(metrics),
-      budgetSuggestions: generateBudgetSuggestions(metrics),
-      goals: generateGoals(metrics),
-    }
-  }
-
-  const calculateHealthScore = (metrics) => {
-    let score = 5 // Base score
-
-    // Positive factors
-    if (metrics.savingsRate > 20) score += 2
-    else if (metrics.savingsRate > 10) score += 1
-    else if (metrics.savingsRate < 0) score -= 2
-
-    if (metrics.balance > 0) score += 1
-    else score -= 1
-
-    if (metrics.transactionCount > 10) score += 1 // Good tracking habits
-
-    // Spending concentration risk
-    const topCategoryPercentage = metrics.topExpenseCategory
-      ? (metrics.topExpenseCategory[1] / metrics.totalExpenses) * 100
-      : 0
-    if (topCategoryPercentage > 50) score -= 1
-
-    return Math.max(1, Math.min(10, score))
-  }
-
-  const generateSummary = (metrics, healthScore) => {
-    if (healthScore >= 8) {
-      return "Excellent financial health! You're demonstrating strong budgeting discipline with healthy savings and balanced spending."
-    } else if (healthScore >= 6) {
-      return "Good financial foundation with room for optimization. A few adjustments could significantly improve your financial position."
-    } else if (healthScore >= 4) {
-      return "Your finances need attention. Focus on increasing income, reducing expenses, or both to improve your financial stability."
-    } else {
-      return "Critical financial situation requiring immediate action. Consider seeking financial counseling and implementing strict budgeting measures."
-    }
-  }
-
-  const generateStrengths = (metrics) => {
-    const strengths = []
-
-    if (metrics.savingsRate > 15) {
-      strengths.push("Strong savings discipline - you're saving above the recommended 15% rate")
-    }
-
-    if (metrics.transactionCount > 15) {
-      strengths.push("Excellent expense tracking - you're consistently recording transactions")
-    }
-
-    if (metrics.balance > 0) {
-      strengths.push("Positive cash flow - you're living within your means")
-    }
-
-    const categoryCount = Object.keys(metrics.expensesByCategory).length
-    if (categoryCount >= 4) {
-      strengths.push("Diversified spending across multiple categories shows balanced lifestyle")
-    }
-
-    if (strengths.length === 0) {
-      strengths.push("You're taking the first step by tracking your finances - that's commendable!")
-    }
-
-    return strengths
-  }
-
-  const generateImprovements = (metrics) => {
-    const improvements = []
-
-    if (metrics.savingsRate < 10) {
-      improvements.push({
-        area: "Increase Savings Rate",
-        suggestion: `Aim to save at least 15-20% of income. Currently at ${metrics.savingsRate.toFixed(1)}%`,
-        action: "Set up automatic transfers to savings account",
-      })
-    }
-
-    if (metrics.balance < 0) {
-      improvements.push({
-        area: "Address Negative Balance",
-        suggestion: "You're spending more than you earn - immediate action needed",
-        action: "Review and cut non-essential expenses immediately",
-      })
-    }
-
-    const topCategoryPercentage = metrics.topExpenseCategory
-      ? (metrics.topExpenseCategory[1] / metrics.totalExpenses) * 100
-      : 0
-    if (topCategoryPercentage > 40) {
-      improvements.push({
-        area: "Diversify Spending",
-        suggestion: `${metrics.topExpenseCategory[0]} represents ${topCategoryPercentage.toFixed(1)}% of expenses`,
-        action: "Look for ways to reduce this dominant expense category",
-      })
-    }
-
-    if (metrics.transactionCount < 10) {
-      improvements.push({
-        area: "Improve Expense Tracking",
-        suggestion: "More consistent transaction recording will provide better insights",
-        action: "Set daily reminders to log expenses",
-      })
-    }
-
-    return improvements
-  }
-
-  const generateSpendingAnalysis = (metrics, trend, topCategory, percentage) => {
-    return {
-      trend:
-        trend === "increasing" ? "📈 Spending increased in the last week" : "📉 Spending decreased in the last week",
-      topCategory: `🏆 Highest expense category: ${topCategory} (${percentage.toFixed(1)}% of total)`,
-      avgTransaction: `💳 Average transaction: $${metrics.avgTransactionAmount.toFixed(2)}`,
-      frequency: `📊 Transaction frequency: ${metrics.transactionCount} transactions recorded`,
-    }
-  }
-
-  const generateSavingsTips = (metrics) => {
-    const tips = []
-
-    if (metrics.expensesByCategory["Groceries"] > metrics.totalExpenses * 0.15) {
-      tips.push("🛒 Meal planning could reduce grocery costs by 15-20%")
-    }
-
-    if (metrics.expensesByCategory["Entertainment"] > metrics.totalExpenses * 0.1) {
-      tips.push("🎮 Consider free entertainment alternatives to reduce costs")
-    }
-
-    if (metrics.expensesByCategory["Transportation"] > metrics.totalExpenses * 0.15) {
-      tips.push("🚗 Explore carpooling or public transit options")
-    }
-
-    tips.push("💡 Try the 24-hour rule: wait a day before non-essential purchases")
-    tips.push("🏦 Automate savings to make it effortless")
-
-    return tips
-  }
-
-  const generateBudgetSuggestions = (metrics) => {
-    const suggestions = []
-
-    // 50/30/20 rule suggestions
-    const needs = metrics.totalExpenses * 0.5
-    const wants = metrics.totalExpenses * 0.3
-    const savings = metrics.totalIncome * 0.2
-
-    suggestions.push({
-      rule: "50/30/20 Budget Rule",
-      needs: `Needs (50%): $${needs.toFixed(2)}`,
-      wants: `Wants (30%): $${wants.toFixed(2)}`,
-      savings: `Savings (20%): $${savings.toFixed(2)}`,
-    })
-
-    // Category-specific suggestions
-    Object.entries(metrics.expensesByCategory).forEach(([category, amount]) => {
-      const percentage = (amount / metrics.totalExpenses) * 100
-      if (percentage > 30) {
-        suggestions.push({
-          category,
-          current: `${percentage.toFixed(1)}%`,
-          suggestion: "Consider reducing this category to below 25% of total expenses",
-        })
-      }
-    })
-
-    return suggestions
-  }
-
-  const generateGoals = (metrics) => {
-    const shortTerm = []
-    const longTerm = []
-
-    // Short-term goals (1-3 months)
-    if (metrics.savingsRate < 15) {
-      shortTerm.push("Increase savings rate to 15% within 2 months")
-    }
-
-    if (metrics.balance < metrics.totalIncome * 0.25) {
-      shortTerm.push("Build emergency fund equal to 1 month of expenses")
-    }
-
-    shortTerm.push("Track all expenses for 30 consecutive days")
-
-    // Long-term goals (6+ months)
-    longTerm.push("Build emergency fund covering 3-6 months of expenses")
-    longTerm.push("Achieve 20% savings rate consistently")
-    longTerm.push("Diversify income sources")
-
-    if (metrics.totalIncome > 0) {
-      const emergencyFund = metrics.totalExpenses * 6
-      longTerm.push(`Save $${emergencyFund.toFixed(2)} for full emergency fund`)
-    }
-
-    return { shortTerm, longTerm }
   }
 
   useEffect(() => {
-    generateAIInsights()
-  }, [budget])
+    if (!budget || !user) {
+      setLoading(false)
+      return
+    }
+    setRecentDismissal(null)
+    setDismissedIds(new Set())
+    setInsights(null)
+    setLoading(true)
+    loadInsights()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [budget?.id, budget?.transactions?.length, user?.id])
 
-  if (loading) {
-    return (
-      <div>
-        <button className="cancelButton secondary-button" onClick={() => setViewMode("details")}>
-          ← Back to Details
-        </button>
-        <h1 className="header">AI Financial Report</h1>
-        <div className="ai-loading">
-          <div className="loading-spinner"></div>
-          <p>Analyzing your financial data...</p>
-          <p className="loading-subtext">Generating personalized insights and recommendations</p>
-        </div>
-      </div>
-    )
+  const handleDismiss = async (itemId) => {
+    if (!user || !cycleId) return
+    try {
+      await dismissInsightForCycle(user.id, cycleId, itemId)
+      setDismissedIds((prev) => {
+        const updated = new Set(prev)
+        updated.add(itemId)
+        return updated
+      })
+      setRecentDismissal({ id: itemId, label: findInsightLabel(itemId) })
+    } catch (err) {
+      console.error("Failed to dismiss insight", err)
+      setError("Couldn't update your AI feed preferences.")
+    }
   }
+
+  const handleUndoDismiss = async () => {
+    if (!user || !cycleId || !recentDismissal) return
+    try {
+      await restoreInsightForCycle(user.id, cycleId, recentDismissal.id)
+      setDismissedIds((prev) => {
+        const updated = new Set(prev)
+        updated.delete(recentDismissal.id)
+        return updated
+      })
+      setRecentDismissal(null)
+    } catch (err) {
+      console.error("Failed to restore insight", err)
+      setError("Couldn't restore that insight. Please refresh.")
+    }
+  }
+
+  const filteredInsights = useMemo(() => {
+    if (!insights) return null
+    const hidden = dismissedIds
+    return {
+      ...insights,
+      strengths: insights.strengths.filter((item) => !hidden.has(item.id)),
+      improvements: insights.improvements.filter((item) => !hidden.has(item.id)),
+      spendingAnalysis: insights.spendingAnalysis.filter((item) => !hidden.has(item.id)),
+      savingsTips: insights.savingsTips.filter((item) => !hidden.has(item.id)),
+      budgetSuggestions: insights.budgetSuggestions.filter((item) => !hidden.has(item.id)),
+      goals: {
+        shortTerm: insights.goals.shortTerm.filter((item) => !hidden.has(item.id)),
+        longTerm: insights.goals.longTerm.filter((item) => !hidden.has(item.id)),
+      },
+    }
+  }, [insights, dismissedIds])
 
   if (error) {
     return (
@@ -319,13 +214,33 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
         <h1 className="header">AI Financial Report</h1>
         <div className="error-state">
           <p className="error-message">{error}</p>
-          <button className="primary-button" onClick={generateAIInsights}>
+          <button className="primary-button" onClick={() => loadInsights({ forceRefresh: true })}>
             Try Again
           </button>
         </div>
       </div>
     )
   }
+
+  if (loading || !filteredInsights) {
+    return (
+      <div>
+        <button className="cancelButton secondary-button" onClick={() => setViewMode("details")}>
+          ← Back to Details
+        </button>
+        <h1 className="header">AI Financial Report</h1>
+        <div className="ai-loading">
+          <div className="loading-spinner"></div>
+          <p>{refreshing ? "Refreshing your insights..." : "Analyzing your financial data..."}</p>
+          <p className="loading-subtext">Generating personalized insights and recommendations</p>
+        </div>
+      </div>
+    )
+  }
+
+  const cycleLabel = formatCycleLabel(cycleId)
+  const paid = isPaidPlan(plan)
+  const { strengths, improvements, spendingAnalysis, savingsTips, budgetSuggestions, goals } = filteredInsights
 
   return (
     <div>
@@ -334,129 +249,210 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
       </button>
       <h1 className="header">AI Financial Report</h1>
 
-      {/* Compact Health Score */}
-      <div className="compact-health-score">
-        <div className="health-score-content">
-          <div className="health-score-number">{insights.healthScore}/10</div>
-          <div className="health-score-label">Financial Health</div>
-        </div>
-        <div className="health-score-bar">
-          <div className="health-score-fill" style={{ width: `${(insights.healthScore / 10) * 100}%` }}></div>
+      <div className="summary-callout">
+        <div className="callout-icon">🤖</div>
+        <div className="callout-content">
+          <h3 className="callout-title">Plan overview</h3>
+          <p className="callout-text">
+            You are on the <strong>{plan?.toUpperCase()}</strong> plan. {cached ? "Instant summary served from cache." : "Fresh insights generated just now."}
+          </p>
+          {generatedAt && (
+            <p className="loading-subtext">Last generated {new Date(generatedAt).toLocaleString()}</p>
+          )}
         </div>
       </div>
 
-      {/* Budget Optimization */}
+      {recentDismissal && (
+        <div className="summary-callout" style={{ background: "var(--color-surface-02)", marginTop: "1rem" }}>
+          <div className="callout-icon">🧹</div>
+          <div className="callout-content">
+            <h3 className="callout-title">Hidden for {cycleLabel}</h3>
+            <p className="callout-text">
+              "{recentDismissal.label}" won't appear again this cycle.
+            </p>
+            <button className="secondary-button" onClick={handleUndoDismiss}>
+              Undo dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="report-section">
-        <h2 className="section-title">📋 Budget Optimization</h2>
-        {insights.budgetSuggestions.map((suggestion, idx) => (
-          <div key={idx} className="budget-suggestion">
-            {suggestion.rule && (
-              <div className="budget-rule">
-                <h3>{suggestion.rule}</h3>
-                <div className="budget-breakdown">
-                  <div>{suggestion.needs}</div>
-                  <div>{suggestion.wants}</div>
-                  <div>{suggestion.savings}</div>
+        <h2 className="section-title">Free AI summaries</h2>
+        <div className="compact-health-score">
+          <div className="health-score-content">
+            <div className="health-score-number">{filteredInsights.healthScore}/10</div>
+            <div className="health-score-label">Financial Health</div>
+          </div>
+          <div className="health-score-bar">
+            <div className="health-score-fill" style={{ width: `${(filteredInsights.healthScore / 10) * 100}%` }}></div>
+          </div>
+        </div>
+
+        <div className="summary-callout">
+          <div className="callout-icon">💡</div>
+          <div className="callout-content">
+            <h3 className="callout-title">Financial Overview</h3>
+            <p className="callout-text">{filteredInsights.summary.text}</p>
+          </div>
+        </div>
+
+        {strengths.length > 0 && (
+          <div className="report-section">
+            <h3 className="section-title">✅ Your Strengths</h3>
+            {strengths.map((item) => (
+              <div key={item.id} className="strength-item-compact" style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem" }}>
+                <span>{item.text}</span>
+                <button className="dismiss-button" title={`Hide until ${cycleLabel}`} onClick={() => handleDismiss(item.id)}>
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {spendingAnalysis.length > 0 && (
+          <div className="report-section">
+            <h3 className="section-title">📈 Spending Insights</h3>
+            <div className="analysis-grid-compact">
+              {spendingAnalysis.map((item) => (
+                <div key={item.id} className="analysis-item-compact" style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem" }}>
+                  <span>{item.text}</span>
+                  <button className="dismiss-button" title={`Hide until ${cycleLabel}`} onClick={() => handleDismiss(item.id)}>
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="report-section">
+        <h2 className="section-title">Paid recommendations</h2>
+        {paid ? (
+          <>
+            {improvements.length > 0 && (
+              <div className="report-section">
+                <h3 className="section-title">🎯 Growth Areas</h3>
+                {improvements.map((item) => (
+                  <div key={item.id} className="improvement-item-compact">
+                    <div className="improvement-title-compact">{item.area}</div>
+                    <div className="improvement-action-compact">{item.suggestion}</div>
+                    <div className="improvement-action-compact">{item.action}</div>
+                    <button className="dismiss-button" title={`Hide until ${cycleLabel}`} onClick={() => handleDismiss(item.id)}>
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {savingsTips.length > 0 && (
+              <div className="report-section">
+                <h3 className="section-title">💡 Savings Tips</h3>
+                <div className="tips-grid">
+                  {savingsTips.map((item) => (
+                    <div key={item.id} className="tip-item-compact" style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem" }}>
+                      <span>{item.text}</span>
+                      <button className="dismiss-button" title={`Hide until ${cycleLabel}`} onClick={() => handleDismiss(item.id)}>
+                        ✕
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
-            {suggestion.category && (
-              <div className="category-suggestion">
-                <strong>{suggestion.category}:</strong> Currently {suggestion.current} - {suggestion.suggestion}
+
+            {budgetSuggestions.length > 0 && (
+              <div className="report-section">
+                <h3 className="section-title">📋 Budget Optimization</h3>
+                {budgetSuggestions.map((item) => (
+                  <div key={item.id} className="budget-suggestion" style={{ position: "relative" }}>
+                    {item.rule && (
+                      <div className="budget-rule">
+                        <h3>{item.rule}</h3>
+                        <div className="budget-breakdown">
+                          <div>{item.needs}</div>
+                          <div>{item.wants}</div>
+                          <div>{item.savings}</div>
+                        </div>
+                      </div>
+                    )}
+                    {item.category && (
+                      <div className="category-suggestion">
+                        <strong>{item.category}:</strong> Currently {item.current} - {item.suggestion}
+                      </div>
+                    )}
+                    <button
+                      className="dismiss-button"
+                      style={{ position: "absolute", top: "0.5rem", right: "0.5rem" }}
+                      title={`Hide until ${cycleLabel}`}
+                      onClick={() => handleDismiss(item.id)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
-          </div>
-        ))}
-      </div>
 
-      {/* Summary Callout */}
-      <div className="summary-callout">
-        <div className="callout-icon">💡</div>
-        <div className="callout-content">
-          <h3 className="callout-title">Financial Overview</h3>
-          <p className="callout-text">{insights.summary}</p>
-        </div>
-      </div>
-
-      {/* Combined Strengths & Improvements */}
-      <div className="report-section">
-        <h2 className="section-title">⚖️ Strengths & Areas for Growth</h2>
-
-        <div className="strengths-improvements-grid">
-          <div className="strengths-column">
-            <h3 className="column-title">✅ Your Strengths</h3>
-            {insights.strengths.map((strength, idx) => (
-              <div key={idx} className="strength-item-compact">
-                <span className="strength-icon">✓</span>
-                <span>{strength}</span>
+            {(goals.shortTerm.length > 0 || goals.longTerm.length > 0) && (
+              <div className="report-section">
+                <h3 className="section-title">🎯 Recommended Goals</h3>
+                <div className="goals-container-compact">
+                  <div className="goals-column">
+                    <h3>Next 3 Months</h3>
+                    {goals.shortTerm.map((item) => (
+                      <div key={item.id} className="goal-item-compact short-term" style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem" }}>
+                        <span>📅 {item.text}</span>
+                        <button className="dismiss-button" title={`Hide until ${cycleLabel}`} onClick={() => handleDismiss(item.id)}>
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="goals-column">
+                    <h3>6+ Months</h3>
+                    {goals.longTerm.map((item) => (
+                      <div key={item.id} className="goal-item-compact long-term" style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem" }}>
+                        <span>📆 {item.text}</span>
+                        <button className="dismiss-button" title={`Hide until ${cycleLabel}`} onClick={() => handleDismiss(item.id)}>
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
-
-          <div className="improvements-column">
-            <h3 className="column-title">🎯 Growth Areas</h3>
-            {insights.improvements.map((improvement, idx) => (
-              <div key={idx} className="improvement-item-compact">
-                <div className="improvement-title-compact">{improvement.area}</div>
-                <div className="improvement-action-compact">{improvement.action}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Spending Analysis */}
-      <div className="report-section">
-        <h2 className="section-title">📈 Spending Insights</h2>
-        <div className="analysis-grid-compact">
-          <div className="analysis-item-compact">{insights.spendingAnalysis.trend}</div>
-          <div className="analysis-item-compact">{insights.spendingAnalysis.topCategory}</div>
-          <div className="analysis-item-compact">{insights.spendingAnalysis.avgTransaction}</div>
-          <div className="analysis-item-compact">{insights.spendingAnalysis.frequency}</div>
-        </div>
-      </div>
-
-      {/* Quick Tips */}
-      <div className="report-section">
-        <h2 className="section-title">💡 Quick Savings Tips</h2>
-        <div className="tips-grid">
-          {insights.savingsTips.slice(0, 4).map((tip, idx) => (
-            <div key={idx} className="tip-item-compact">
-              {tip}
+            )}
+          </>
+        ) : (
+          <div className="summary-callout" style={{ background: "var(--color-surface-02)" }}>
+            <div className="callout-icon">🚀</div>
+            <div className="callout-content">
+              <h3 className="callout-title">Unlock personalized recommendations</h3>
+              <p className="callout-text">
+                Upgrade to a paid plan to receive targeted savings tips, budget optimizations, and actionable goals tailored to your spending.
+              </p>
+              <button className="primary-button">Upgrade plan</button>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Goals */}
       <div className="report-section">
-        <h2 className="section-title">🎯 Recommended Goals</h2>
-        <div className="goals-container-compact">
-          <div className="goals-column">
-            <h3>Next 3 Months</h3>
-            {insights.goals.shortTerm.slice(0, 3).map((goal, idx) => (
-              <div key={idx} className="goal-item-compact short-term">
-                <span>📅</span>
-                {goal}
-              </div>
-            ))}
-          </div>
-          <div className="goals-column">
-            <h3>6+ Months</h3>
-            {insights.goals.longTerm.slice(0, 3).map((goal, idx) => (
-              <div key={idx} className="goal-item-compact long-term">
-                <span>📆</span>
-                {goal}
-              </div>
-            ))}
-          </div>
+        <h2 className="section-title">Spending snapshot</h2>
+        <div className="analysis-grid-compact">
+          <div className="analysis-item-compact">Total income: {formatCurrency(filteredInsights.totals?.totalIncome || 0)}</div>
+          <div className="analysis-item-compact">Total expenses: {formatCurrency(filteredInsights.totals?.totalExpenses || 0)}</div>
+          <div className="analysis-item-compact">Balance: {formatCurrency(filteredInsights.totals?.balance || 0)}</div>
         </div>
       </div>
 
-      {/* Refresh Button */}
       <div className="report-actions">
-        <button className="primary-button" onClick={generateAIInsights}>
-          🔄 Generate New Report
+        <button className="primary-button" disabled={refreshing} onClick={() => loadInsights({ forceRefresh: true })}>
+          {refreshing ? "Refreshing..." : "🔄 Regenerate"}
         </button>
       </div>
     </div>
