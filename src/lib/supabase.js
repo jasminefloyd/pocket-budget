@@ -179,6 +179,9 @@ let demoCategories = {
   ],
 }
 
+let demoGoals = []
+let demoGoalContributions = []
+
 export const getBudgets = async (userId) => {
   // For demo admin, return in-memory data
   if (userId === DEMO_ADMIN.user.id) {
@@ -390,5 +393,157 @@ export const updateUserCategories = async (userId, categories) => {
       },
     ])
     .select()
+  return { data, error }
+}
+
+const withGoalRelations = (goal) => ({
+  ...goal,
+  goal_contributions: (goal.goal_contributions || goal.contributions || []).sort(
+    (a, b) => new Date(b.contributed_at || b.date || b.created_at) - new Date(a.contributed_at || a.date || a.created_at),
+  ),
+})
+
+export const getGoals = async (userId) => {
+  if (userId === DEMO_ADMIN.user.id) {
+    const goalsWithRelations = demoGoals.map((goal) => ({
+      ...goal,
+      goal_contributions: demoGoalContributions
+        .filter((contribution) => contribution.goal_id === goal.id)
+        .sort((a, b) => new Date(b.contributed_at) - new Date(a.contributed_at)),
+    }))
+    return { data: goalsWithRelations, error: null }
+  }
+
+  const { data, error } = await supabase
+    .from("goals")
+    .select(`
+      *,
+      goal_contributions (*)
+    `)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+
+  return { data: data?.map(withGoalRelations) || [], error }
+}
+
+export const createGoal = async (userId, goalData) => {
+  const payload = {
+    user_id: userId,
+    name: goalData.name,
+    target_amount: goalData.targetAmount,
+    target_date: goalData.targetDate,
+    status: goalData.status || "active",
+    milestones: goalData.milestones || [25, 50, 75, 100],
+    linked_budget_id: goalData.linkedBudgetId || null,
+    created_at: new Date().toISOString(),
+  }
+
+  if (userId === DEMO_ADMIN.user.id) {
+    const newGoal = {
+      ...payload,
+      id: `demo-goal-${Date.now()}`,
+    }
+    demoGoals = [newGoal, ...demoGoals]
+    return { data: [withGoalRelations(newGoal)], error: null }
+  }
+
+  const { data, error } = await supabase
+    .from("goals")
+    .insert([payload])
+    .select(`
+      *,
+      goal_contributions (*)
+    `)
+
+  return { data: data?.map(withGoalRelations) || [], error }
+}
+
+export const updateGoal = async (goalId, goalData) => {
+  const updates = {
+    name: goalData.name,
+    target_amount: goalData.targetAmount,
+    target_date: goalData.targetDate,
+    status: goalData.status,
+    milestones: goalData.milestones,
+    linked_budget_id: goalData.linkedBudgetId ?? null,
+  }
+
+  if (goalId.startsWith("demo-goal-")) {
+    const goalIndex = demoGoals.findIndex((goal) => goal.id === goalId)
+    if (goalIndex === -1) {
+      return { data: null, error: { message: "Goal not found" } }
+    }
+
+    demoGoals[goalIndex] = {
+      ...demoGoals[goalIndex],
+      ...Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined)),
+    }
+
+    return { data: [withGoalRelations(demoGoals[goalIndex])], error: null }
+  }
+
+  const filteredUpdates = Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined))
+
+  const { data, error } = await supabase
+    .from("goals")
+    .update(filteredUpdates)
+    .eq("id", goalId)
+    .select(`
+      *,
+      goal_contributions (*)
+    `)
+
+  return { data: data?.map(withGoalRelations) || [], error }
+}
+
+export const deleteGoal = async (goalId) => {
+  if (goalId.startsWith("demo-goal-")) {
+    demoGoals = demoGoals.filter((goal) => goal.id !== goalId)
+    demoGoalContributions = demoGoalContributions.filter((contribution) => contribution.goal_id !== goalId)
+    return { error: null }
+  }
+
+  const { error } = await supabase.from("goals").delete().eq("id", goalId)
+  return { error }
+}
+
+export const addGoalContribution = async (goalId, contributionData) => {
+  const payload = {
+    goal_id: goalId,
+    amount: contributionData.amount,
+    contributed_at: contributionData.date || new Date().toISOString(),
+    note: contributionData.note || null,
+    created_at: new Date().toISOString(),
+  }
+
+  if (goalId.startsWith("demo-goal-")) {
+    const newContribution = {
+      id: `demo-goal-contribution-${Date.now()}`,
+      ...payload,
+    }
+    demoGoalContributions = [newContribution, ...demoGoalContributions]
+    return { data: [newContribution], error: null }
+  }
+
+  const { data, error } = await supabase.from("goal_contributions").insert([payload]).select()
+  return { data, error }
+}
+
+export const getGoalContributions = async (goalId) => {
+  if (goalId.startsWith("demo-goal-")) {
+    return {
+      data: demoGoalContributions
+        .filter((contribution) => contribution.goal_id === goalId)
+        .sort((a, b) => new Date(b.contributed_at) - new Date(a.contributed_at)),
+      error: null,
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("goal_contributions")
+    .select("*")
+    .eq("goal_id", goalId)
+    .order("contributed_at", { ascending: false })
+
   return { data, error }
 }
