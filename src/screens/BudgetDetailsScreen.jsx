@@ -40,6 +40,38 @@ const toSparkline = (values) => {
 
 const formatCurrency = (value) => `$${Number.parseFloat(value || 0).toFixed(2)}`
 
+const getTodayISODate = () => new Date().toISOString().split("T")[0]
+
+const ensureISODate = (value, fallback) => {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value
+  }
+
+  const attempt = value ? new Date(value) : null
+  if (attempt && !Number.isNaN(attempt.getTime())) {
+    return attempt.toISOString().split("T")[0]
+  }
+
+  if (fallback !== undefined) {
+    if (typeof fallback === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fallback)) {
+      return fallback
+    }
+    const fallbackAttempt = fallback ? new Date(fallback) : null
+    if (fallbackAttempt && !Number.isNaN(fallbackAttempt.getTime())) {
+      return fallbackAttempt.toISOString().split("T")[0]
+    }
+  }
+
+  return getTodayISODate()
+}
+
+const formatTransactionDate = (isoDate) => {
+  if (!isoDate) return ""
+  const parsed = new Date(isoDate)
+  if (Number.isNaN(parsed.getTime())) return isoDate
+  return parsed.toLocaleDateString()
+}
+
 export default function BudgetDetailsScreen({
   budget,
   categories,
@@ -66,7 +98,7 @@ export default function BudgetDetailsScreen({
     amount: "",
     budgetedAmount: "",
     category: "",
-    date: new Date().toLocaleDateString(),
+    date: getTodayISODate(),
     type: "expense",
     receipt: null,
   })
@@ -111,6 +143,16 @@ export default function BudgetDetailsScreen({
   const [showAddCategory, setShowAddCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
   const [newCategoryAmount, setNewCategoryAmount] = useState("")
+
+  const transactions = useMemo(
+    () => (budget.transactions || []).map((tx) => ({ ...tx, date: ensureISODate(tx.date) })),
+    [budget.transactions],
+  )
+
+  const normalizedBudget = useMemo(
+    () => ({ ...budget, transactions }),
+    [budget, transactions],
+  )
 
   useEffect(() => {
     setAllocationDraft((budget.categoryBudgets || []).map((entry) => ({ ...entry })))
@@ -190,7 +232,7 @@ export default function BudgetDetailsScreen({
   }
 
   const openDeleteCategoryModal = (category) => {
-    const actual = (budget.transactions || [])
+    const actual = transactions
       .filter((tx) => tx.type === "expense" && tx.category === category.category)
       .reduce((sum, tx) => sum + tx.amount, 0)
     const remaining = Math.max(0, Number(category.budgetedAmount || 0) - actual)
@@ -389,7 +431,7 @@ export default function BudgetDetailsScreen({
       return Array.from(trackedCategories)
     }
     const totals = {}
-    ;(budget.transactions || [])
+    transactions
       .filter((tx) => tx.type === "expense")
       .forEach((tx) => {
         totals[tx.category] = (totals[tx.category] || 0) + tx.amount
@@ -399,7 +441,7 @@ export default function BudgetDetailsScreen({
       .map(([category]) => category)
     const baseline = (budget.categoryBudgets || []).map((entry) => entry.category)
     return Array.from(new Set([...sorted, ...baseline])).slice(0, 6)
-  }, [trackedCategories, budget.transactions, budget.categoryBudgets])
+  }, [trackedCategories, transactions, budget.categoryBudgets])
 
   const availableCategories = useMemo(() => {
     const registry = new Set((budget.categoryBudgets || []).map((entry) => entry.category))
@@ -448,7 +490,7 @@ export default function BudgetDetailsScreen({
     const previousEnd = new Date(currentStart)
 
     const sumForRange = (category, start, end) =>
-      (budget.transactions || [])
+      transactions
         .filter((tx) => tx.type === "expense" && tx.category === category)
         .filter((tx) => {
           const txDate = new Date(tx.date)
@@ -492,7 +534,7 @@ export default function BudgetDetailsScreen({
       currentStart,
       currentEnd,
     }
-  }, [budget.transactions, categoriesToAnalyse, reportSchedule, pacing])
+  }, [transactions, categoriesToAnalyse, reportSchedule, pacing])
 
   const quietHoursStart = Number(nudgeConfig.quietStart) ?? 21
   const quietHoursEnd = Number(nudgeConfig.quietEnd) ?? 7
@@ -592,7 +634,7 @@ export default function BudgetDetailsScreen({
       amount: "",
       budgetedAmount: "",
       category: "",
-      date: new Date().toLocaleDateString(),
+      date: getTodayISODate(),
       type: resolvedType,
       receipt: null,
     })
@@ -601,7 +643,11 @@ export default function BudgetDetailsScreen({
   }
 
   const openEditModal = (tx) => {
-    setFormTx({ ...tx, budgetedAmount: tx.budgetedAmount || "" })
+    setFormTx({
+      ...tx,
+      date: ensureISODate(tx.date),
+      budgetedAmount: tx.budgetedAmount || "",
+    })
     setEditingTx(tx)
     setShowModal(true)
   }
@@ -620,7 +666,7 @@ export default function BudgetDetailsScreen({
         budgetedAmount: formTx.budgetedAmount ? Number.parseFloat(formTx.budgetedAmount) : null,
         category: formTx.category,
         type: resolveTypeKey(formTx.type),
-        date: formTx.date,
+        date: ensureISODate(formTx.date),
         receipt: formTx.receipt,
       }
 
@@ -632,7 +678,7 @@ export default function BudgetDetailsScreen({
           alert("Failed to update transaction. Please try again.")
           return
         }
-        updatedTransactions = (budget.transactions || []).map((t) =>
+        updatedTransactions = transactions.map((t) =>
           t.id === editingTx.id ? { ...cleanedTx, id: editingTx.id } : t,
         )
       } else {
@@ -646,7 +692,7 @@ export default function BudgetDetailsScreen({
           ...cleanedTx,
           id: data[0].id,
         }
-        updatedTransactions = [...(budget.transactions || []), newTransaction]
+        updatedTransactions = [...transactions, newTransaction]
       }
 
       const updatedBudget = { ...budget, transactions: updatedTransactions }
@@ -683,21 +729,21 @@ export default function BudgetDetailsScreen({
     }
   }
 
-  const totalIncome = (budget.transactions || [])
+  const totalIncome = transactions
     .filter((t) => t.type === "income")
     .reduce((sum, t) => sum + t.amount, 0)
 
-  const totalExpenses = (budget.transactions || [])
+  const totalExpenses = transactions
     .filter((t) => t.type === "expense")
     .reduce((sum, t) => sum + t.amount, 0)
 
-  const totalBudgeted = (budget.transactions || [])
+  const totalBudgeted = transactions
     .filter((t) => t.type === "expense" && t.budgetedAmount)
     .reduce((sum, t) => sum + t.budgetedAmount, 0)
 
   const balance = totalIncome - totalExpenses
 
-  const pacing = calculateBudgetPacing(budget)
+  const pacing = calculateBudgetPacing(normalizedBudget)
 
   const cycleType = budget.cycleMetadata?.type || "monthly"
   const cycleLabel = getCycleLabel(cycleType)
@@ -711,7 +757,7 @@ export default function BudgetDetailsScreen({
   )
 
   // Calculate category breakdown for pie chart
-  const categoryBreakdown = (budget.transactions || [])
+  const categoryBreakdown = transactions
     .filter((t) => t.type === "expense")
     .reduce((acc, t) => {
       acc[t.category] = (acc[t.category] || 0) + t.amount
@@ -740,7 +786,7 @@ export default function BudgetDetailsScreen({
   ]
 
   // Get all transactions for current tab and sort them
-  const allTransactions = (budget.transactions || [])
+  const allTransactions = transactions
     .filter((t) => t.type === resolveTypeKey(tab))
     .sort((a, b) => new Date(b.date) - new Date(a.date))
 
@@ -1301,10 +1347,10 @@ export default function BudgetDetailsScreen({
             className={tab === "expenses" ? "tabActive" : "tabInactive"}
             onClick={() => handleTabChange("expenses")}
           >
-            Expenses ({(budget.transactions || []).filter((t) => t.type === "expense").length})
+            Expenses ({transactions.filter((t) => t.type === "expense").length})
           </button>
           <button className={tab === "income" ? "tabActive" : "tabInactive"} onClick={() => handleTabChange("income")}>
-            Income ({(budget.transactions || []).filter((t) => t.type === "income").length})
+            Income ({transactions.filter((t) => t.type === "income").length})
           </button>
         </div>
 
@@ -1327,7 +1373,7 @@ export default function BudgetDetailsScreen({
                     <div className="transaction-details-main">
                       <span className="transaction-name">{t.name}</span>
                       <div className="transaction-meta">
-                        {t.category} • {t.date}
+                        {t.category} • {formatTransactionDate(t.date)}
                         {t.receipt && <span className="receipt-indicator">📎</span>}
                       </div>
                     </div>
@@ -1376,6 +1422,16 @@ export default function BudgetDetailsScreen({
               step="0.01"
               value={formTx.amount}
               onChange={(e) => setFormTx({ ...formTx, amount: e.target.value })}
+              disabled={loading}
+            />
+
+            <input
+              className="input"
+              type="date"
+              value={formTx.date}
+              onChange={(e) =>
+                setFormTx((prev) => ({ ...prev, date: ensureISODate(e.target.value, prev.date) }))
+              }
               disabled={loading}
             />
 
