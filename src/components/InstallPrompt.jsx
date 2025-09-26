@@ -1,59 +1,111 @@
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
+
+const DISMISS_STORAGE_KEY = "installPromptDismissedUntil"
+const DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000
+
+const getStandaloneStatus = () => {
+  if (typeof window === "undefined") return false
+  return (
+    window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true
+  )
+}
+
+const storeDismissUntil = () => {
+  const hideUntil = Date.now() + DISMISS_DURATION_MS
+  localStorage.setItem(DISMISS_STORAGE_KEY, hideUntil.toString())
+  return hideUntil
+}
+
+const hasActiveDismissal = () => {
+  const storedValue = localStorage.getItem(DISMISS_STORAGE_KEY)
+  if (!storedValue) return false
+  const dismissedUntil = Number.parseInt(storedValue, 10)
+  return Number.isFinite(dismissedUntil) && Date.now() < dismissedUntil
+}
 
 export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [showInstallPrompt, setShowInstallPrompt] = useState(false)
+  const [isStandalone, setIsStandalone] = useState(() => getStandaloneStatus())
 
   useEffect(() => {
-    const handler = (e) => {
-      // Prevent the mini-infobar from appearing on mobile
-      e.preventDefault()
-      // Stash the event so it can be triggered later
-      setDeferredPrompt(e)
+    const handleBeforeInstallPrompt = (event) => {
+      event.preventDefault()
+
+      if (isStandalone || hasActiveDismissal()) {
+        setDeferredPrompt(null)
+        setShowInstallPrompt(false)
+        return
+      }
+
+      setDeferredPrompt(event)
       setShowInstallPrompt(true)
     }
 
-    window.addEventListener("beforeinstallprompt", handler)
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt)
 
-    return () => window.removeEventListener("beforeinstallprompt", handler)
+    return () => window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt)
+  }, [isStandalone])
+
+  useEffect(() => {
+    const handleAppInstalled = () => {
+      setIsStandalone(true)
+      setShowInstallPrompt(false)
+      setDeferredPrompt(null)
+    }
+
+    const mediaQuery = window.matchMedia("(display-mode: standalone)")
+    const handleMediaChange = () => {
+      const standalone = getStandaloneStatus()
+      setIsStandalone(standalone)
+      if (standalone) {
+        setShowInstallPrompt(false)
+        setDeferredPrompt(null)
+      }
+    }
+
+    handleMediaChange()
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleMediaChange)
+    } else if (typeof mediaQuery.addListener === "function") {
+      mediaQuery.addListener(handleMediaChange)
+    }
+
+    window.addEventListener("appinstalled", handleAppInstalled)
+
+    return () => {
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", handleMediaChange)
+      } else if (typeof mediaQuery.removeListener === "function") {
+        mediaQuery.removeListener(handleMediaChange)
+      }
+      window.removeEventListener("appinstalled", handleAppInstalled)
+    }
   }, [])
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return
 
-    // Show the install prompt
     deferredPrompt.prompt()
-
-    // Wait for the user to respond to the prompt
     const { outcome } = await deferredPrompt.userChoice
+
+    setDeferredPrompt(null)
+    setShowInstallPrompt(false)
 
     if (outcome === "accepted") {
       console.log("User accepted the install prompt")
     } else {
       console.log("User dismissed the install prompt")
+      storeDismissUntil()
     }
-
-    // Clear the deferredPrompt
-    setDeferredPrompt(null)
-    setShowInstallPrompt(false)
   }
 
   const handleDismiss = () => {
     setShowInstallPrompt(false)
-    // Hide for 7 days
-    localStorage.setItem("installPromptDismissed", Date.now() + 7 * 24 * 60 * 60 * 1000)
+    setDeferredPrompt(null)
+    storeDismissUntil()
   }
-
-  // Check if user previously dismissed
-  useEffect(() => {
-    const dismissed = localStorage.getItem("installPromptDismissed")
-    if (dismissed && Date.now() < Number.parseInt(dismissed)) {
-      setShowInstallPrompt(false)
-    }
-  }, [])
-
-  // Don't show if already installed
-  const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true
 
   if (!showInstallPrompt || isStandalone) {
     return null

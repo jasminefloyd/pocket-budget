@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import PropTypes from "prop-types"
 import {
   addGoalContribution,
   createGoal,
@@ -139,12 +140,7 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets }) {
   const [saving, setSaving] = useState(false)
   const [loggingContribution, setLoggingContribution] = useState(false)
 
-  useEffect(() => {
-    if (!user) return
-    loadGoals()
-  }, [user])
-
-  const loadGoals = async () => {
+  const loadGoals = useCallback(async () => {
     if (!user) return
     setLoading(true)
     setError(null)
@@ -163,8 +159,8 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets }) {
         progressMap[goal.id] = getGoalMetrics(goal).progress
       })
       prevProgressRef.current = progressMap
-      if (normalized.length && !selectedGoalId) {
-        setSelectedGoalId(normalized[0].id)
+      if (normalized.length) {
+        setSelectedGoalId((current) => current || normalized[0].id)
       }
     } catch (loadError) {
       console.error("Unexpected error loading goals:", loadError)
@@ -172,7 +168,12 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (!user) return
+    loadGoals()
+  }, [user, loadGoals])
 
   const handleCreateGoal = async (event) => {
     event.preventDefault()
@@ -686,4 +687,27 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets }) {
       )}
     </div>
   )
+}
+
+GoalsScreen.propTypes = {
+  setViewMode: PropTypes.func.isRequired,
+  budgets: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+      name: PropTypes.string.isRequired,
+      transactions: PropTypes.arrayOf(
+        PropTypes.shape({
+          id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+          name: PropTypes.string.isRequired,
+          amount: PropTypes.number.isRequired,
+          budgetedAmount: PropTypes.number,
+          category: PropTypes.string.isRequired,
+          type: PropTypes.string.isRequired,
+          date: PropTypes.string.isRequired,
+          receipt: PropTypes.string,
+        }),
+      ),
+    }),
+  ),
+  setBudgets: PropTypes.func.isRequired,
 }
