@@ -2,19 +2,21 @@
 
 import { useState, useEffect } from "react"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
-import { getBudgets, getUserCategories, updateUserCategories } from "./lib/supabase"
+import { getBudgets, getGoals, getUserCategories, updateUserCategories } from "./lib/supabase"
 import BudgetsScreen from "./screens/BudgetsScreen"
 import BudgetDetailsScreen from "./screens/BudgetDetailsScreen"
 import CategoriesScreen from "./screens/CategoriesScreen"
 import AIInsightsScreen from "./screens/AIInsightsScreen"
+import GoalsScreen from "./screens/GoalsScreen"
 import LoginScreen from "./screens/LoginScreen"
 import LoadingScreen from "./components/LoadingScreen"
 import Header from "./components/Header"
 import InstallPrompt from "./components/InstallPrompt"
 
 function AppContent() {
-  const { user, loading: authLoading, initializing } = useAuth()
+  const { user, userProfile, loading: authLoading, initializing } = useAuth()
   const [budgets, setBudgets] = useState([])
+  const [goals, setGoals] = useState([])
   const [categories, setCategories] = useState({
     income: [
       { name: "Salary", icon: "💼" },
@@ -82,6 +84,13 @@ function AppContent() {
       } else if (categoriesData?.categories) {
         setCategories(categoriesData.categories)
       }
+
+      const { data: goalsData, error: goalsError } = await getGoals(user.id)
+      if (goalsError) {
+        console.error("Error loading goals:", goalsError)
+      } else if (goalsData) {
+        setGoals(goalsData)
+      }
     } catch (error) {
       console.error("Error loading user data:", error)
     } finally {
@@ -125,10 +134,29 @@ function AppContent() {
     return <LoadingScreen message="Setting up your account" />
   }
 
+  const showPrimaryTabs = ["budgets", "goals"].includes(viewMode)
+
   return (
     <div className="container">
-      <Header title="Pocket Budget" showLogout={viewMode === "budgets"} />
+      <Header title="Pocket Budget" showLogout={viewMode === "budgets" || viewMode === "goals"} />
       <InstallPrompt />
+
+      {showPrimaryTabs && (
+        <div className="view-tabs">
+          <button
+            className={`view-tab ${viewMode === "budgets" ? "active" : ""}`}
+            onClick={() => setViewMode("budgets")}
+          >
+            Budgets
+          </button>
+          <button
+            className={`view-tab ${viewMode === "goals" ? "active" : ""}`}
+            onClick={() => setViewMode("goals")}
+          >
+            Goals
+          </button>
+        </div>
+      )}
 
       {viewMode === "budgets" && (
         <BudgetsScreen
@@ -137,6 +165,15 @@ function AppContent() {
           setViewMode={setViewMode}
           setBudgets={setBudgets}
           userId={user.id}
+        />
+      )}
+      {viewMode === "goals" && (
+        <GoalsScreen
+          goals={goals}
+          setGoals={setGoals}
+          setViewMode={setViewMode}
+          userId={user.id}
+          userProfile={userProfile}
         />
       )}
       {viewMode === "details" && selectedBudget && (

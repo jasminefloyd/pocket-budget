@@ -32,8 +32,84 @@ const DEMO_ADMIN = {
     id: "demo-admin-user-id",
     email: "test@me.com",
     full_name: "Demo Admin",
+    subscription_status: "trial",
+    trial_ends_at: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString(),
+    entitlements: { goals: true },
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   },
+}
+
+const DEFAULT_GOAL_MILESTONES = [25, 50, 75, 100]
+
+const buildDefaultMilestones = (targetAmount = 0) => {
+  const amount = Number(targetAmount) || 0
+  if (amount <= 0) {
+    return []
+  }
+
+  return DEFAULT_GOAL_MILESTONES.map((percentage) => ({
+    label: `${percentage}%`,
+    amount: Number((amount * (percentage / 100)).toFixed(2)),
+    achieved_at: null,
+  }))
+}
+
+const transformContributionRecord = (contribution) => {
+  if (!contribution) {
+    return null
+  }
+
+  return {
+    id: contribution.id,
+    goalId: contribution.goal_id,
+    userId: contribution.user_id,
+    amount: Number(contribution.amount || 0),
+    contributedAt: contribution.contributed_at || contribution.created_at,
+    createdAt: contribution.created_at,
+  }
+}
+
+export const transformGoalRecord = (goal) => {
+  if (!goal) {
+    return null
+  }
+
+  const contributions = Array.isArray(goal.goal_contributions)
+    ? goal.goal_contributions
+        .map(transformContributionRecord)
+        .filter(Boolean)
+        .sort((a, b) => new Date(b.contributedAt) - new Date(a.contributedAt))
+    : []
+
+  return {
+    id: goal.id,
+    userId: goal.user_id,
+    name: goal.name,
+    targetAmount: Number(goal.target_amount || 0),
+    targetDate: goal.target_date,
+    currentAmount: Number(goal.current_amount || 0),
+    milestones: goal.milestones || [],
+    createdAt: goal.created_at,
+    updatedAt: goal.updated_at,
+    contributions,
+  }
+}
+
+const evaluateMilestones = (milestones = [], newAmount, timestamp = new Date().toISOString()) => {
+  const achieved = []
+  const updated = milestones.map((milestone) => {
+    if (!milestone) return milestone
+    const amountTarget = Number(milestone.amount || 0)
+    const alreadyAchieved = Boolean(milestone.achieved_at)
+    if (!alreadyAchieved && Number(newAmount || 0) >= amountTarget && amountTarget > 0) {
+      achieved.push({ label: milestone.label, amount: amountTarget })
+      return { ...milestone, achieved_at: timestamp }
+    }
+    return milestone
+  })
+
+  return { updatedMilestones: updated, achievedMilestones: achieved }
 }
 
 // Auth helper functions
@@ -135,6 +211,9 @@ export const createUserProfile = async (userId, email, fullName) => {
     return { data: [DEMO_ADMIN.profile], error: null }
   }
 
+  const trialEndsAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString()
+  const defaultEntitlements = { goals: true }
+
   const { data, error } = await supabase
     .from("user_profiles")
     .insert([
@@ -142,7 +221,11 @@ export const createUserProfile = async (userId, email, fullName) => {
         id: userId,
         email,
         full_name: fullName,
+        subscription_status: "trial",
+        trial_ends_at: trialEndsAt,
+        entitlements: defaultEntitlements,
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       },
     ])
     .select()
@@ -161,6 +244,8 @@ export const getUserProfile = async (userId) => {
 
 // Demo data storage (in-memory for demo admin)
 let demoBudgets = []
+let demoGoals = []
+let demoGoalContributions = []
 let demoCategories = {
   income: [
     { name: "Salary", icon: "💼" },
@@ -178,6 +263,11 @@ let demoCategories = {
     { name: "Shopping", icon: "🛍️" },
   ],
 }
+
+const getDemoGoalContributions = (goalId) =>
+  demoGoalContributions
+    .filter((contribution) => contribution.goal_id === goalId)
+    .sort((a, b) => new Date(b.contributed_at) - new Date(a.contributed_at))
 
 export const getBudgets = async (userId) => {
   // For demo admin, return in-memory data
@@ -391,4 +481,276 @@ export const updateUserCategories = async (userId, categories) => {
     ])
     .select()
   return { data, error }
+}
+
+export const getGoals = async (userId) => {
+  if (!userId) {
+    return { data: [], error: null }
+  }
+
+  if (userId === DEMO_ADMIN.user.id) {
+    const goals = demoGoals
+      .filter((goal) => goal.user_id === userId)
+      .map((goal) =>
+        transformGoalRecord({
+          ...goal,
+          goal_contributions: getDemoGoalContributions(goal.id),
+        }),
+      )
+    return { data: goals, error: null }
+  }
+
+  const { data, error } = await supabase
+    .from("goals")
+    .select(`
+      *,
+      goal_contributions (*)
+    `)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    return { data: null, error }
+  }
+
+  return { data: (data || []).map(transformGoalRecord), error: null }
+}
+
+export const createGoal = async (userId, goalData) => {
+  const nowIso = new Date().toISOString()
+  const targetAmount = Number(goalData?.targetAmount || 0)
+  const milestones =
+    Array.isArray(goalData?.milestones) && goalData.milestones.length > 0
+      ? goalData.milestones
+      : buildDefaultMilestones(targetAmount)
+
+  if (userId === DEMO_ADMIN.user.id) {
+    const newGoal = {
+      id: `demo-goal-${Date.now()}`,
+      user_id: userId,
+      name: goalData?.name || "New Goal",
+      target_amount: targetAmount,
+      target_date: goalData?.targetDate,
+      current_amount: Number(goalData?.currentAmount || 0),
+      milestones,
+      created_at: nowIso,
+      updated_at: nowIso,
+    }
+
+    demoGoals = [newGoal, ...demoGoals]
+
+    return {
+      data: transformGoalRecord({ ...newGoal, goal_contributions: [] }),
+      error: null,
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("goals")
+    .insert([
+      {
+        user_id: userId,
+        name: goalData?.name,
+        target_amount: targetAmount,
+        target_date: goalData?.targetDate,
+        current_amount: Number(goalData?.currentAmount || 0),
+        milestones,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ])
+    .select(`
+      *,
+      goal_contributions (*)
+    `)
+    .single()
+
+  if (error) {
+    return { data: null, error }
+  }
+
+  return { data: transformGoalRecord(data), error: null }
+}
+
+export const updateGoal = async (goalId, updates = {}) => {
+  if (!goalId) {
+    return { data: null, error: { message: "Missing goal id" } }
+  }
+
+  const payload = { updated_at: new Date().toISOString() }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "name")) {
+    payload.name = updates.name
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "targetAmount")) {
+    payload.target_amount = Number(updates.targetAmount)
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "targetDate")) {
+    payload.target_date = updates.targetDate
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "currentAmount")) {
+    payload.current_amount = Number(updates.currentAmount)
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "milestones")) {
+    payload.milestones = updates.milestones
+  }
+
+  if (goalId.startsWith("demo-goal-")) {
+    const goalIndex = demoGoals.findIndex((goal) => goal.id === goalId)
+    if (goalIndex === -1) {
+      return { data: null, error: { message: "Goal not found" } }
+    }
+
+    demoGoals[goalIndex] = {
+      ...demoGoals[goalIndex],
+      ...payload,
+    }
+
+    return {
+      data: transformGoalRecord({
+        ...demoGoals[goalIndex],
+        goal_contributions: getDemoGoalContributions(goalId),
+      }),
+      error: null,
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("goals")
+    .update(payload)
+    .eq("id", goalId)
+    .select(`
+      *,
+      goal_contributions (*)
+    `)
+    .single()
+
+  if (error) {
+    return { data: null, error }
+  }
+
+  return { data: transformGoalRecord(data), error: null }
+}
+
+export const deleteGoal = async (goalId) => {
+  if (!goalId) {
+    return { error: { message: "Missing goal id" } }
+  }
+
+  if (goalId.startsWith("demo-goal-")) {
+    demoGoals = demoGoals.filter((goal) => goal.id !== goalId)
+    demoGoalContributions = demoGoalContributions.filter((contribution) => contribution.goal_id !== goalId)
+    return { error: null }
+  }
+
+  const { error } = await supabase.from("goals").delete().eq("id", goalId)
+  return { error }
+}
+
+export const logGoalContribution = async (userId, goal, amount) => {
+  const contributionAmount = Number(amount)
+  if (!goal || !goal.id) {
+    return { data: null, error: { message: "Goal not found" } }
+  }
+
+  if (!contributionAmount || contributionAmount <= 0) {
+    return { data: null, error: { message: "Invalid contribution amount" } }
+  }
+
+  const timestamp = new Date().toISOString()
+
+  if (goal.id.startsWith("demo-goal-")) {
+    const contribution = {
+      id: `demo-goal-contribution-${Date.now()}`,
+      goal_id: goal.id,
+      user_id: userId,
+      amount: contributionAmount,
+      contributed_at: timestamp,
+      created_at: timestamp,
+    }
+
+    demoGoalContributions = [contribution, ...demoGoalContributions]
+
+    const goalIndex = demoGoals.findIndex((item) => item.id === goal.id)
+    if (goalIndex === -1) {
+      return { data: null, error: { message: "Goal not found" } }
+    }
+
+    const newAmount = Number(demoGoals[goalIndex].current_amount || 0) + contributionAmount
+    const { updatedMilestones, achievedMilestones } = evaluateMilestones(
+      demoGoals[goalIndex].milestones || [],
+      newAmount,
+      timestamp,
+    )
+
+    demoGoals[goalIndex] = {
+      ...demoGoals[goalIndex],
+      current_amount: newAmount,
+      milestones: updatedMilestones,
+      updated_at: timestamp,
+    }
+
+    return {
+      data: {
+        goal: transformGoalRecord({
+          ...demoGoals[goalIndex],
+          goal_contributions: getDemoGoalContributions(goal.id),
+        }),
+        contribution: transformContributionRecord(contribution),
+        celebratedMilestones: achievedMilestones,
+      },
+      error: null,
+    }
+  }
+
+  const { data: contributionData, error: contributionError } = await supabase
+    .from("goal_contributions")
+    .insert([
+      {
+        goal_id: goal.id,
+        user_id: userId,
+        amount: contributionAmount,
+        contributed_at: timestamp,
+        created_at: timestamp,
+      },
+    ])
+    .select()
+    .single()
+
+  if (contributionError) {
+    return { data: null, error: contributionError }
+  }
+
+  const { updatedMilestones, achievedMilestones } = evaluateMilestones(
+    goal.milestones || [],
+    Number(goal.currentAmount || 0) + contributionAmount,
+    timestamp,
+  )
+
+  const { data: updatedGoalData, error: updateError } = await supabase
+    .from("goals")
+    .update({
+      current_amount: Number(goal.currentAmount || 0) + contributionAmount,
+      milestones: updatedMilestones,
+      updated_at: timestamp,
+    })
+    .eq("id", goal.id)
+    .select(`
+      *,
+      goal_contributions (*)
+    `)
+    .single()
+
+  if (updateError) {
+    return { data: null, error: updateError }
+  }
+
+  return {
+    data: {
+      goal: transformGoalRecord(updatedGoalData),
+      contribution: transformContributionRecord(contributionData),
+      celebratedMilestones: achievedMilestones,
+    },
+    error: null,
+  }
 }

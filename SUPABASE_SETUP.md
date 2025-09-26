@@ -49,6 +49,9 @@ CREATE TABLE user_profiles (
     id UUID REFERENCES auth.users(id) PRIMARY KEY,
     email TEXT NOT NULL,
     full_name TEXT,
+    subscription_status TEXT DEFAULT 'trial',
+    trial_ends_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() + INTERVAL '14 days',
+    entitlements JSONB DEFAULT '{"goals": true}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -242,6 +245,107 @@ CREATE TRIGGER update_user_categories_updated_at
 
 -- Create index
 CREATE INDEX idx_user_categories_user_id ON user_categories(user_id);
+\`\`\`
+
+### 5. Goals Table
+
+\`\`\`sql
+-- Create goals table
+CREATE TABLE goals (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    name TEXT NOT NULL,
+    target_amount DECIMAL(10,2) NOT NULL,
+    target_date DATE NOT NULL,
+    current_amount DECIMAL(10,2) DEFAULT 0,
+    milestones JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
+
+-- Create policies
+CREATE POLICY "Users can view own goals" ON goals
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create own goals" ON goals
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own goals" ON goals
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own goals" ON goals
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- Trigger for updated_at
+CREATE TRIGGER update_goals_updated_at
+    BEFORE UPDATE ON goals
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Helpful indexes
+CREATE INDEX idx_goals_user_id ON goals(user_id);
+CREATE INDEX idx_goals_target_date ON goals(target_date);
+\`\`\`
+
+### 6. Goal Contributions Table
+
+\`\`\`sql
+-- Create goal_contributions table
+CREATE TABLE goal_contributions (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    goal_id UUID REFERENCES goals(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    contributed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE goal_contributions ENABLE ROW LEVEL SECURITY;
+
+-- Create policies to ensure users only access their own goal contributions
+CREATE POLICY "Users can view own goal contributions" ON goal_contributions
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM goals
+            WHERE goals.id = goal_contributions.goal_id
+            AND goals.user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can insert own goal contributions" ON goal_contributions
+    FOR INSERT WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM goals
+            WHERE goals.id = goal_contributions.goal_id
+            AND goals.user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can update own goal contributions" ON goal_contributions
+    FOR UPDATE USING (
+        EXISTS (
+            SELECT 1 FROM goals
+            WHERE goals.id = goal_contributions.goal_id
+            AND goals.user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can delete own goal contributions" ON goal_contributions
+    FOR DELETE USING (
+        EXISTS (
+            SELECT 1 FROM goals
+            WHERE goals.id = goal_contributions.goal_id
+            AND goals.user_id = auth.uid()
+        )
+    );
+
+-- Helpful indexes
+CREATE INDEX idx_goal_contributions_goal_id ON goal_contributions(goal_id);
+CREATE INDEX idx_goal_contributions_created_at ON goal_contributions(created_at DESC);
 \`\`\`
 
 ## Step 4: Optional - Create Database Functions
