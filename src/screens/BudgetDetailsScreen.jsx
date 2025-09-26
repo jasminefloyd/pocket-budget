@@ -30,6 +30,15 @@ export default function BudgetDetailsScreen({
 
   const [selectedSlice, setSelectedSlice] = useState(null)
 
+  const cycleType = (budget.cycleType || "monthly").toLowerCase()
+  const cycleLabels = {
+    monthly: "Monthly",
+    "per-paycheck": "Per-paycheck",
+    custom: "Custom",
+  }
+  const cycleLabel = cycleLabels[cycleType] || cycleLabels.custom
+  const cycleIsPremium = cycleType !== "monthly"
+
   const ITEMS_PER_PAGE = 7
 
   const resolveTypeKey = (typeOrTab) => {
@@ -122,6 +131,8 @@ export default function BudgetDetailsScreen({
       const { error } = await updateBudget(budget.id, {
         name: newName,
         categoryBudgets: budget.categoryBudgets,
+        cycleType: budget.cycleType,
+        cycleSettings: budget.cycleSettings,
       })
 
       if (error) {
@@ -311,6 +322,15 @@ export default function BudgetDetailsScreen({
         onChange={(e) => handleBudgetNameChange(e.target.value)}
         placeholder="Budget Name"
       />
+
+      <div className="budgetCycle" style={{ marginBottom: "1.5rem" }}>
+        Cycle: {cycleLabel}
+        {cycleIsPremium && (
+          <span className="cycle-option-lock" title="Pocket Budget Plus cadence" style={{ marginLeft: "0.35rem" }}>
+            🔒
+          </span>
+        )}
+      </div>
 
       {/* Budget Overview Section */}
       <div className="budget-overview-card">

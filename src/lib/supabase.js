@@ -26,6 +26,7 @@ const DEMO_ADMIN = {
     user_metadata: {
       full_name: "Demo Admin",
     },
+    plan: "paid",
     created_at: new Date().toISOString(),
   },
   profile: {
@@ -204,6 +205,8 @@ export const createBudget = async (userId, budgetData) => {
       user_id: userId,
       name: budgetData.name,
       category_budgets: budgetData.categoryBudgets || [],
+      cycle_type: budgetData.cycleType ?? "monthly",
+      cycle_settings: budgetData.cycleSettings ?? {},
       created_at: new Date().toISOString(),
       transactions: [],
     }
@@ -218,6 +221,8 @@ export const createBudget = async (userId, budgetData) => {
         user_id: userId,
         name: budgetData.name,
         category_budgets: budgetData.categoryBudgets || [],
+        cycle_type: budgetData.cycleType ?? "monthly",
+        cycle_settings: budgetData.cycleSettings ?? {},
         created_at: new Date().toISOString(),
       },
     ])
@@ -230,22 +235,39 @@ export const updateBudget = async (budgetId, budgetData) => {
   if (budgetId.startsWith("demo-budget-")) {
     const budgetIndex = demoBudgets.findIndex((b) => b.id === budgetId)
     if (budgetIndex !== -1) {
-      demoBudgets[budgetIndex] = {
+      const updatedBudget = {
         ...demoBudgets[budgetIndex],
         name: budgetData.name,
         category_budgets: budgetData.categoryBudgets || [],
       }
+      if (Object.prototype.hasOwnProperty.call(budgetData, "cycleType")) {
+        updatedBudget.cycle_type = budgetData.cycleType ?? "monthly"
+      }
+      if (Object.prototype.hasOwnProperty.call(budgetData, "cycleSettings")) {
+        updatedBudget.cycle_settings = budgetData.cycleSettings ?? {}
+      }
+      demoBudgets[budgetIndex] = updatedBudget
       return { data: [demoBudgets[budgetIndex]], error: null }
     }
     return { data: null, error: { message: "Budget not found" } }
   }
 
+  const payload = {
+    name: budgetData.name,
+    category_budgets: budgetData.categoryBudgets || [],
+  }
+
+  if (Object.prototype.hasOwnProperty.call(budgetData, "cycleType")) {
+    payload.cycle_type = budgetData.cycleType ?? "monthly"
+  }
+
+  if (Object.prototype.hasOwnProperty.call(budgetData, "cycleSettings")) {
+    payload.cycle_settings = budgetData.cycleSettings ?? {}
+  }
+
   const { data, error } = await supabase
     .from("budgets")
-    .update({
-      name: budgetData.name,
-      category_budgets: budgetData.categoryBudgets || [],
-    })
+    .update(payload)
     .eq("id", budgetId)
     .select()
   return { data, error }

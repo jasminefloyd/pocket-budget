@@ -319,10 +319,14 @@ export const getBudgets = async (userId) => {
 export const createBudget = async (userId, budgetData) => {
   await delay()
   const newBudget = {
-    ...budgetData,
     id: generateId(),
     user_id: userId,
+    name: budgetData.name,
+    category_budgets: budgetData.categoryBudgets || [],
+    cycle_type: budgetData.cycleType ?? "monthly",
+    cycle_settings: budgetData.cycleSettings ?? {},
     created_at: new Date().toISOString(),
+    transactions: [],
   }
 
   const existingBudgets = JSON.parse(localStorage.getItem(`budgets_${userId}`) || "[]")
@@ -339,7 +343,21 @@ export const updateBudget = async (budgetId, budgetData) => {
   const index = existingBudgets.findIndex((budget) => budget.id === budgetId)
 
   if (index > -1) {
-    existingBudgets[index] = { ...existingBudgets[index], ...budgetData }
+    const updated = {
+      ...existingBudgets[index],
+      name: budgetData.name,
+      category_budgets: budgetData.categoryBudgets || existingBudgets[index].category_budgets || [],
+    }
+
+    if (Object.prototype.hasOwnProperty.call(budgetData, "cycleType")) {
+      updated.cycle_type = budgetData.cycleType ?? "monthly"
+    }
+
+    if (Object.prototype.hasOwnProperty.call(budgetData, "cycleSettings")) {
+      updated.cycle_settings = budgetData.cycleSettings ?? {}
+    }
+
+    existingBudgets[index] = updated
     localStorage.setItem(`budgets_${userId}`, JSON.stringify(existingBudgets))
     return { data: [existingBudgets[index]], error: null }
   }

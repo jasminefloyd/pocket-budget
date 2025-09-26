@@ -13,7 +13,7 @@ import Header from "./components/Header"
 import InstallPrompt from "./components/InstallPrompt"
 
 function AppContent() {
-  const { user, loading: authLoading, initializing } = useAuth()
+  const { user, userProfile, loading: authLoading, initializing } = useAuth()
   const [budgets, setBudgets] = useState([])
   const [categories, setCategories] = useState({
     income: [
@@ -59,6 +59,8 @@ function AppContent() {
             name: budget.name,
             createdAt: new Date(budget.created_at).toLocaleDateString(),
             categoryBudgets: budget.category_budgets || [],
+            cycleType: budget.cycle_type || "monthly",
+            cycleSettings: budget.cycle_settings || {},
             transactions:
               budget.transactions?.map((tx) => ({
                 id: tx.id,
@@ -137,6 +139,7 @@ function AppContent() {
           setViewMode={setViewMode}
           setBudgets={setBudgets}
           userId={user.id}
+          userProfile={userProfile}
         />
       )}
       {viewMode === "details" && selectedBudget && (
