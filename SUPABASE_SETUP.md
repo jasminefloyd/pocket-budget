@@ -414,6 +414,35 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 \`\`\`
 
+### AI Insights Table
+
+\`\`\`sql
+-- Table to persist OpenAI generated insights per budget
+create table if not exists ai_insights (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references auth.users(id) on delete cascade,
+    budget_id uuid not null references budgets(id) on delete cascade,
+    tier text not null default 'free',
+    model text not null,
+    prompt jsonb not null,
+    insights jsonb not null,
+    raw_response text not null,
+    usage jsonb,
+    created_at timestamptz not null default now()
+);
+
+alter table ai_insights enable row level security;
+
+create policy "Users can view own AI insights" on ai_insights
+    for select using (auth.uid() = user_id);
+
+create policy "Users can insert AI insights" on ai_insights
+    for insert with check (auth.uid() = user_id);
+
+create policy "Users can delete own AI insights" on ai_insights
+    for delete using (auth.uid() = user_id);
+\`\`\`
+
 ## Step 5: Test Your Setup
 
 1. Start your development server: `npm run dev`
@@ -484,6 +513,25 @@ supabase db pull
 # Generate TypeScript types
 supabase gen types typescript --project-id your-project-id > types/supabase.ts
 \`\`\`
+
+## Step 7: AI Insights Edge Function
+
+1. Create a Supabase Edge Function named `ai-insights` using the source in `supabase/functions/ai-insights`.
+2. Add the following environment variables to the function (via the Supabase dashboard or CLI):
+
+   \`\`\`bash
+   supabase secrets set OPENAI_API_KEY=your-openai-key
+   supabase secrets set SUPABASE_URL=https://your-project-id.supabase.co
+   supabase secrets set SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+   \`\`\`
+
+3. Deploy the function:
+
+   \`\`\`bash
+   supabase functions deploy ai-insights --project-ref your-project-id
+   \`\`\`
+
+4. Invoke the function from your client with the authenticated user's ID, the budget ID, and the calculated metrics payload. The function will call OpenAI for insights and persist the structured response to the `ai_insights` table so both free and paid plans stay synchronized.
 
 ## Next Steps
 
