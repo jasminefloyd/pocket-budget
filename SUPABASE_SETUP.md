@@ -244,6 +244,109 @@ CREATE TRIGGER update_user_categories_updated_at
 CREATE INDEX idx_user_categories_user_id ON user_categories(user_id);
 \`\`\`
 
+### 5. Goals Table
+
+\`\`\`sql
+-- Create goals table
+CREATE TABLE goals (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    name TEXT NOT NULL,
+    target_amount NUMERIC(12,2) NOT NULL,
+    target_date DATE,
+    status TEXT NOT NULL DEFAULT 'active',
+    milestones JSONB NOT NULL DEFAULT '[25,50,75,100]'::jsonb,
+    linked_budget_id UUID REFERENCES budgets(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
+
+-- Create policies (mirrors budgets access patterns)
+CREATE POLICY "Users can view own goals" ON goals
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create own goals" ON goals
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own goals" ON goals
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own goals" ON goals
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- Reuse the updated_at trigger for modification timestamps
+CREATE TRIGGER update_goals_updated_at
+    BEFORE UPDATE ON goals
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Helpful indexes for dashboard queries
+CREATE INDEX idx_goals_user_id ON goals(user_id);
+CREATE INDEX idx_goals_created_at ON goals(created_at DESC);
+CREATE INDEX idx_goals_status ON goals(status);
+\`\`\`
+
+### 6. Goal Contributions Table
+
+\`\`\`sql
+-- Create goal_contributions table
+CREATE TABLE goal_contributions (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    goal_id UUID REFERENCES goals(id) ON DELETE CASCADE NOT NULL,
+    amount NUMERIC(12,2) NOT NULL,
+    contributed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    note TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE goal_contributions ENABLE ROW LEVEL SECURITY;
+
+-- Create policies (join against the parent goal to confirm ownership)
+CREATE POLICY "Users can view contributions for owned goals" ON goal_contributions
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM goals
+            WHERE goals.id = goal_contributions.goal_id
+            AND goals.user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can add contributions to owned goals" ON goal_contributions
+    FOR INSERT WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM goals
+            WHERE goals.id = goal_contributions.goal_id
+            AND goals.user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can update contributions for owned goals" ON goal_contributions
+    FOR UPDATE USING (
+        EXISTS (
+            SELECT 1 FROM goals
+            WHERE goals.id = goal_contributions.goal_id
+            AND goals.user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can delete contributions for owned goals" ON goal_contributions
+    FOR DELETE USING (
+        EXISTS (
+            SELECT 1 FROM goals
+            WHERE goals.id = goal_contributions.goal_id
+            AND goals.user_id = auth.uid()
+        )
+    );
+
+-- Indexes to match query patterns
+CREATE INDEX idx_goal_contributions_goal_id ON goal_contributions(goal_id);
+CREATE INDEX idx_goal_contributions_contributed_at ON goal_contributions(contributed_at DESC);
+\`\`\`
+
 ## Step 4: Optional - Create Database Functions
 
 ### Function to automatically create user profile on signup
@@ -317,7 +420,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 2. Try creating an account with email/password
 3. Try signing in with Google
 4. Create a budget and add some transactions
-5. Verify data is being saved in your Supabase dashboard
+5. Create a goal, update its milestones/status, and add a contribution
+6. Verify data is being saved in your Supabase dashboard
 
 ## Step 6: Production Considerations
 
@@ -350,11 +454,17 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
    - Verify RLS policies
    - Check user permissions
    - Review SQL syntax in Supabase logs
+   - Confirm new goals/goal_contributions policies reference the correct tables and join conditions
 
 3. **Google OAuth issues**
    - Verify Google Cloud Console setup
    - Check redirect URIs
    - Ensure OAuth consent screen is configured
+
+4. **Goal or contribution actions failing**
+   - Ensure the `linked_budget_id` matches an existing budget owned by the user
+   - Confirm milestones are valid JSON arrays (defaults to `[25,50,75,100]`)
+   - Verify `goal_contributions.goal_id` points to a goal owned by the signed-in user
 
 ### Useful Supabase CLI Commands
 
