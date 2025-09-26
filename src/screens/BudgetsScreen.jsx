@@ -1,13 +1,53 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { createBudget, updateBudget, deleteBudget } from "../lib/supabase"
 
-export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode, setBudgets, userId }) {
+const FALLBACK_EXPENSE_BUCKETS = [
+  "Groceries",
+  "Rent",
+  "Transportation",
+  "Utilities",
+  "Entertainment",
+  "Bills",
+  "Dining Out",
+  "Healthcare",
+  "Savings",
+]
+
+const ensureCategoryBudgetTimestamps = (categoryBudgets) => {
+  return (categoryBudgets || []).map((cat) => ({
+    category: cat.category,
+    budgetedAmount:
+      typeof cat.budgetedAmount === "number"
+        ? cat.budgetedAmount
+        : Number.parseFloat(cat.budgetedAmount) || 0,
+    updatedAt: cat.updatedAt || new Date().toISOString(),
+  }))
+}
+
+export default function BudgetsScreen({
+  budgets,
+  setSelectedBudget,
+  setViewMode,
+  setBudgets,
+  userId,
+  categories,
+}) {
   const [editingBudgetId, setEditingBudgetId] = useState(null)
   const [budgetNameInput, setBudgetNameInput] = useState("")
   const [openMenuId, setOpenMenuId] = useState(null)
   const [loading, setLoading] = useState(false)
+
+  const defaultCategoryNames = useMemo(() => {
+    const expenseCategoryNames = (categories?.expense || []).map((cat) => cat.name)
+    const fallbackCategories = FALLBACK_EXPENSE_BUCKETS.filter(
+      (name) => !expenseCategoryNames.includes(name),
+    )
+    const combined = [...expenseCategoryNames, ...fallbackCategories]
+    const requiredLength = Math.max(8, expenseCategoryNames.length)
+    return combined.slice(0, requiredLength)
+  }, [categories])
 
   const openBudget = (budget) => {
     setSelectedBudget(budget)
@@ -19,7 +59,11 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
     try {
       const newBudgetData = {
         name: `My Budget`,
-        categoryBudgets: [],
+        categoryBudgets: defaultCategoryNames.map((category) => ({
+          category,
+          budgetedAmount: 0,
+          updatedAt: new Date().toISOString(),
+        })),
       }
 
       const { data, error } = await createBudget(userId, newBudgetData)
@@ -31,7 +75,9 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
           id: data[0].id,
           name: data[0].name,
           createdAt: new Date(data[0].created_at).toLocaleDateString(),
-          categoryBudgets: data[0].category_budgets || [],
+          categoryBudgets: ensureCategoryBudgetTimestamps(
+            data[0].category_budgets || newBudgetData.categoryBudgets,
+          ),
           transactions: [],
         }
         setBudgets([newBudget, ...budgets])
@@ -54,7 +100,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
     try {
       const { error } = await updateBudget(budget.id, {
         name: budgetNameInput.trim(),
-        categoryBudgets: budget.categoryBudgets,
+        categoryBudgets: ensureCategoryBudgetTimestamps(budget.categoryBudgets),
       })
 
       if (error) {
@@ -78,7 +124,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
     try {
       const duplicateData = {
         name: `${budget.name} (Copy)`,
-        categoryBudgets: budget.categoryBudgets || [],
+        categoryBudgets: ensureCategoryBudgetTimestamps(budget.categoryBudgets),
       }
 
       const { data, error } = await createBudget(userId, duplicateData)
@@ -90,7 +136,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
           id: data[0].id,
           name: data[0].name,
           createdAt: new Date(data[0].created_at).toLocaleDateString(),
-          categoryBudgets: data[0].category_budgets || [],
+          categoryBudgets: ensureCategoryBudgetTimestamps(data[0].category_budgets || []),
           transactions: [],
         }
         setBudgets([newBudget, ...budgets])

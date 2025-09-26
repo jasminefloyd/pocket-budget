@@ -30,6 +30,8 @@ function AppContent() {
       { name: "Entertainment", icon: "🎮" },
       { name: "Bills", icon: "🧾" },
       { name: "Shopping", icon: "🛍️" },
+      { name: "Dining Out", icon: "🍽️" },
+      { name: "Healthcare", icon: "🏥" },
     ],
   })
   const [selectedBudget, setSelectedBudget] = useState(null)
@@ -137,6 +139,7 @@ function AppContent() {
           setViewMode={setViewMode}
           setBudgets={setBudgets}
           userId={user.id}
+          categories={categories}
         />
       )}
       {viewMode === "details" && selectedBudget && (

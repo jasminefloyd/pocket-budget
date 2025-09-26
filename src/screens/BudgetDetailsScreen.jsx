@@ -1,7 +1,51 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { createTransaction, updateTransaction, updateBudget } from "../lib/supabase"
+
+const normalizeCategoryBudgets = (categoryBudgets = []) => {
+  return categoryBudgets.map((cat) => ({
+    category: cat.category,
+    budgetedAmount:
+      typeof cat.budgetedAmount === "number"
+        ? cat.budgetedAmount
+        : Number.parseFloat(cat.budgetedAmount) || 0,
+    updatedAt: cat.updatedAt || cat.updated_at || new Date().toISOString(),
+  }))
+}
+
+const deepCloneAllocations = (allocations = []) => allocations.map((cat) => ({ ...cat }))
+
+const toInputValue = (value) => {
+  const numeric = Number.isFinite(value) ? value : Number.parseFloat(value) || 0
+  return numeric.toFixed(2)
+}
+
+const convertToDrafts = (allocations = []) => {
+  return allocations.reduce((acc, cat) => {
+    acc[cat.category] = toInputValue(cat.budgetedAmount)
+    return acc
+  }, {})
+}
+
+const formatCurrency = (value) => {
+  const numeric = Number.isFinite(value) ? value : Number.parseFloat(value) || 0
+  return numeric.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+const formatTimestamp = (value) => {
+  if (!value) return "Just now"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return "Just now"
+  }
+  return date.toLocaleString()
+}
+
+const sanitizeCategoryName = (name = "") => name.replace(/\s+/g, " ").trim()
 
 export default function BudgetDetailsScreen({
   budget,
@@ -29,8 +73,262 @@ export default function BudgetDetailsScreen({
   })
 
   const [selectedSlice, setSelectedSlice] = useState(null)
+  const [categoryAllocations, setCategoryAllocations] = useState(() =>
+    normalizeCategoryBudgets(budget.categoryBudgets),
+  )
+  const [allocationDrafts, setAllocationDrafts] = useState(() =>
+    convertToDrafts(normalizeCategoryBudgets(budget.categoryBudgets)),
+  )
+  const [allocationSaving, setAllocationSaving] = useState(false)
+  const [changeLog, setChangeLog] = useState([])
+  const [showChangeLog, setShowChangeLog] = useState(false)
+  const [snackbar, setSnackbar] = useState(null)
+  const snackbarTimer = useRef(null)
+  const [newCategoryName, setNewCategoryName] = useState("")
+  const [newCategoryAmount, setNewCategoryAmount] = useState("")
 
   const ITEMS_PER_PAGE = 7
+
+  const syncAllocationState = (allocations) => {
+    setCategoryAllocations(allocations)
+    setAllocationDrafts(convertToDrafts(allocations))
+  }
+
+  const showSnackbarMessage = (message, previousAllocations, appliedAllocations, changeId) => {
+    if (!message) return
+    if (snackbarTimer.current) {
+      clearTimeout(snackbarTimer.current)
+    }
+    setSnackbar({
+      message,
+      previousAllocations: deepCloneAllocations(previousAllocations || []),
+      appliedAllocations: deepCloneAllocations(appliedAllocations || []),
+      changeId,
+    })
+    snackbarTimer.current = setTimeout(() => {
+      setSnackbar(null)
+    }, 5000)
+  }
+
+  const persistAllocations = async (
+    allocations,
+    { previousAllocations, changeEntry, snackbarMessage, isUndo = false } = {},
+  ) => {
+    setAllocationSaving(true)
+    try {
+      const normalizedAllocations = normalizeCategoryBudgets(allocations)
+      const { error } = await updateBudget(budget.id, {
+        name: budget.name,
+        categoryBudgets: normalizedAllocations,
+      })
+      if (error) {
+        throw error
+      }
+
+      const updatedBudget = { ...budget, categoryBudgets: normalizedAllocations }
+      const updatedBudgets = budgets.map((b) => (b.id === budget.id ? updatedBudget : b))
+      setBudgets(updatedBudgets)
+      setSelectedBudget(updatedBudget)
+
+      if (!isUndo && changeEntry) {
+        setChangeLog((prev) => [...prev, changeEntry])
+        if (snackbarMessage) {
+          showSnackbarMessage(
+            snackbarMessage,
+            previousAllocations,
+            normalizedAllocations,
+            changeEntry.id,
+          )
+        }
+      } else if (isUndo && changeEntry?.id) {
+        setChangeLog((prev) => prev.filter((entry) => entry.id !== changeEntry.id))
+      }
+    } catch (error) {
+      console.error("Error updating category allocations:", error)
+      alert("Failed to update category allocations. Please try again.")
+      if (previousAllocations) {
+        syncAllocationState(deepCloneAllocations(previousAllocations))
+      }
+    } finally {
+      setAllocationSaving(false)
+    }
+  }
+
+  const handleAllocationInputChange = (category, value) => {
+    setAllocationDrafts((prev) => ({ ...prev, [category]: value }))
+  }
+
+  const commitAllocationChange = async (category, overrideValue) => {
+    const target = categoryAllocations.find((cat) => cat.category === category)
+    if (!target) return
+
+    const rawValue = overrideValue ?? allocationDrafts[category]
+    const parsedValue =
+      rawValue === "" || rawValue === null || rawValue === undefined
+        ? 0
+        : Number.parseFloat(rawValue)
+
+    if (Number.isNaN(parsedValue)) {
+      setAllocationDrafts((prev) => ({
+        ...prev,
+        [category]: toInputValue(target.budgetedAmount),
+      }))
+      alert("Please enter a valid amount.")
+      return
+    }
+
+    if (Math.abs(target.budgetedAmount - parsedValue) < 0.005) {
+      setAllocationDrafts((prev) => ({
+        ...prev,
+        [category]: toInputValue(target.budgetedAmount),
+      }))
+      return
+    }
+
+    const timestamp = new Date().toISOString()
+    const previousAllocations = deepCloneAllocations(categoryAllocations)
+    const updatedAllocations = categoryAllocations.map((cat) =>
+      cat.category === category
+        ? { ...cat, budgetedAmount: parsedValue, updatedAt: timestamp }
+        : cat,
+    )
+
+    syncAllocationState(updatedAllocations)
+
+    const changeEntry = {
+      id: `${Date.now()}-${category}`,
+      category,
+      previousAmount: target.budgetedAmount,
+      newAmount: parsedValue,
+      timestamp,
+      type: "update",
+    }
+
+    await persistAllocations(updatedAllocations, {
+      previousAllocations,
+      changeEntry,
+      snackbarMessage: `Updated ${category} to $${formatCurrency(parsedValue)}`,
+    })
+  }
+
+  const handleAddCategory = async (event) => {
+    event.preventDefault()
+    const trimmedName = sanitizeCategoryName(newCategoryName)
+    if (!trimmedName) {
+      alert("Enter a category name before adding.")
+      return
+    }
+
+    const existingCategory = categoryAllocations.find(
+      (cat) => cat.category.toLowerCase() === trimmedName.toLowerCase(),
+    )
+
+    if (existingCategory) {
+      await commitAllocationChange(existingCategory.category, newCategoryAmount)
+      setNewCategoryName("")
+      setNewCategoryAmount("")
+      return
+    }
+
+    const parsedAmount =
+      newCategoryAmount === "" || newCategoryAmount === null
+        ? 0
+        : Number.parseFloat(newCategoryAmount)
+
+    if (Number.isNaN(parsedAmount)) {
+      alert("Please enter a valid amount for the new category.")
+      return
+    }
+
+    const timestamp = new Date().toISOString()
+    const previousAllocations = deepCloneAllocations(categoryAllocations)
+    const newAllocation = {
+      category: trimmedName,
+      budgetedAmount: parsedAmount,
+      updatedAt: timestamp,
+    }
+    const updatedAllocations = [...categoryAllocations, newAllocation]
+
+    syncAllocationState(updatedAllocations)
+
+    const changeEntry = {
+      id: `${Date.now()}-${trimmedName}`,
+      category: trimmedName,
+      previousAmount: null,
+      newAmount: parsedAmount,
+      timestamp,
+      type: "add",
+    }
+
+    await persistAllocations(updatedAllocations, {
+      previousAllocations,
+      changeEntry,
+      snackbarMessage: `Added ${trimmedName} with $${formatCurrency(parsedAmount)}`,
+    })
+
+    setNewCategoryName("")
+    setNewCategoryAmount("")
+  }
+
+  const handleUndoAllocationChange = async () => {
+    if (!snackbar) return
+    if (snackbarTimer.current) {
+      clearTimeout(snackbarTimer.current)
+    }
+
+    const { previousAllocations, appliedAllocations, changeId } = snackbar
+    setSnackbar(null)
+
+    if (!previousAllocations || previousAllocations.length === 0) {
+      return
+    }
+
+    syncAllocationState(deepCloneAllocations(previousAllocations))
+
+    await persistAllocations(previousAllocations, {
+      previousAllocations: appliedAllocations,
+      changeEntry: { id: changeId },
+      isUndo: true,
+    })
+  }
+
+  const expenseCategorySuggestions = useMemo(() => {
+    const names = new Set((categories?.expense || []).map((cat) => cat.name))
+    categoryAllocations.forEach((cat) => names.add(cat.category))
+    return Array.from(names).sort((a, b) => a.localeCompare(b))
+  }, [categories, categoryAllocations])
+
+  useEffect(() => {
+    const normalized = normalizeCategoryBudgets(budget.categoryBudgets)
+    setCategoryAllocations(normalized)
+    setAllocationDrafts(convertToDrafts(normalized))
+  }, [budget])
+
+  useEffect(() => {
+    const normalized = normalizeCategoryBudgets(budget.categoryBudgets)
+    setChangeLog(
+      normalized.map((cat) => ({
+        id: `${budget.id}-${cat.category}-${cat.updatedAt}`,
+        category: cat.category,
+        previousAmount: null,
+        newAmount: cat.budgetedAmount,
+        timestamp: cat.updatedAt,
+        type: "snapshot",
+      })),
+    )
+    setShowChangeLog(false)
+    setSnackbar(null)
+    setNewCategoryName("")
+    setNewCategoryAmount("")
+  }, [budget.id])
+
+  useEffect(() => {
+    return () => {
+      if (snackbarTimer.current) {
+        clearTimeout(snackbarTimer.current)
+      }
+    }
+  }, [])
 
   const resolveTypeKey = (typeOrTab) => {
     if (typeOrTab === "income" || typeOrTab === "expense") return typeOrTab
@@ -121,7 +419,7 @@ export default function BudgetDetailsScreen({
     try {
       const { error } = await updateBudget(budget.id, {
         name: newName,
-        categoryBudgets: budget.categoryBudgets,
+        categoryBudgets: categoryAllocations,
       })
 
       if (error) {
@@ -458,7 +756,130 @@ export default function BudgetDetailsScreen({
               )}
             </div>
           </div>
+      </div>
+    </div>
+
+      <div className="allocation-editor-card">
+        <div className="allocation-header">
+          <h3 className="allocation-title">Category Allocations</h3>
+          <button
+            type="button"
+            className="allocation-change-log-toggle"
+            onClick={() => setShowChangeLog((prev) => !prev)}
+          >
+            {showChangeLog ? "Hide Change Log" : "Change Log"}
+          </button>
         </div>
+        <p className="allocation-subtitle">
+          Set spending targets for each category. Changes save automatically and keep a timestamped
+          history for this cycle.
+        </p>
+        <div className="allocation-list">
+          {categoryAllocations.length === 0 ? (
+            <p className="allocation-empty">No categories yet. Add one below to get started.</p>
+          ) : (
+            categoryAllocations.map((cat) => (
+              <div key={cat.category} className="allocation-row">
+                <div className="allocation-info">
+                  <span className="allocation-name">{cat.category}</span>
+                  <span className="allocation-updated">Updated {formatTimestamp(cat.updatedAt)}</span>
+                </div>
+                <div className="allocation-actions">
+                  <div className="allocation-input-group">
+                    <span className="allocation-currency">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="allocation-input"
+                      value={allocationDrafts[cat.category] ?? toInputValue(cat.budgetedAmount)}
+                      onChange={(e) => handleAllocationInputChange(cat.category, e.target.value)}
+                      onBlur={() => commitAllocationChange(cat.category)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault()
+                          commitAllocationChange(cat.category)
+                        }
+                      }}
+                      disabled={allocationSaving}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="allocation-save-button secondary-button"
+                    onClick={() => commitAllocationChange(cat.category)}
+                    disabled={allocationSaving}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <form className="allocation-add-form" onSubmit={handleAddCategory}>
+          <div className="allocation-add-fields">
+            <input
+              type="text"
+              list="allocation-category-suggestions"
+              className="allocation-add-input"
+              placeholder="Category name"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              disabled={allocationSaving}
+            />
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              className="allocation-add-input"
+              placeholder="Amount"
+              value={newCategoryAmount}
+              onChange={(e) => setNewCategoryAmount(e.target.value)}
+              disabled={allocationSaving}
+            />
+          </div>
+          <button type="submit" className="allocation-add-button primary-button" disabled={allocationSaving}>
+            Add Category
+          </button>
+        </form>
+
+        <datalist id="allocation-category-suggestions">
+          {expenseCategorySuggestions.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+
+        {showChangeLog && (
+          <div className="allocation-change-log">
+            <h4 className="allocation-change-log-title">Change Log</h4>
+            {changeLog.length === 0 ? (
+              <p className="allocation-empty-log">No allocation adjustments recorded yet.</p>
+            ) : (
+              <ul className="allocation-change-log-list">
+                {changeLog
+                  .slice()
+                  .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                  .map((entry) => (
+                    <li key={entry.id} className="allocation-change-log-item">
+                      <span className="allocation-log-time">{formatTimestamp(entry.timestamp)}</span>
+                      <span className="allocation-log-category">{entry.category}:</span>
+                      {entry.previousAmount !== null ? (
+                        <span className="allocation-log-change">
+                          {`$${formatCurrency(entry.previousAmount)} → $${formatCurrency(entry.newAmount)}`}
+                        </span>
+                      ) : (
+                        <span className="allocation-log-change">
+                          {`Set to $${formatCurrency(entry.newAmount)}`}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Transaction Tabs and List */}
@@ -520,6 +941,19 @@ export default function BudgetDetailsScreen({
       <button className="fab" onClick={() => openAddModal({}, tab)}>
         +
       </button>
+
+      {snackbar && (
+        <div className="allocation-snackbar">
+          <span className="allocation-snackbar-message">{snackbar.message}</span>
+          <button
+            type="button"
+            className="allocation-snackbar-action"
+            onClick={handleUndoAllocationChange}
+          >
+            Undo
+          </button>
+        </div>
+      )}
 
       {showModal && (
         <div className="modalBackdrop">
