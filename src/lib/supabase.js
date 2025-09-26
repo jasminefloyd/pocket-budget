@@ -20,8 +20,8 @@ const storage = typeof window !== "undefined" ? window.localStorage : null
 
 const DEMO_ADMIN = {
   id: "demo-admin-user-id",
-  email: "test@me.com",
-  password: "pass123",
+  email: "fulltest@test.com",
+  password: "tester_full",
   name: "Demo Admin",
 }
 
