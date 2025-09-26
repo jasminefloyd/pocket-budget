@@ -7,13 +7,15 @@ import BudgetsScreen from "./screens/BudgetsScreen"
 import BudgetDetailsScreen from "./screens/BudgetDetailsScreen"
 import CategoriesScreen from "./screens/CategoriesScreen"
 import AIInsightsScreen from "./screens/AIInsightsScreen"
+import GoalsScreen from "./screens/GoalsScreen"
 import LoginScreen from "./screens/LoginScreen"
 import LoadingScreen from "./components/LoadingScreen"
 import Header from "./components/Header"
+import Footer from "./components/Footer"
 import InstallPrompt from "./components/InstallPrompt"
 
 function AppContent() {
-  const { user, loading: authLoading, initializing } = useAuth()
+  const { user, loading: authLoading, initializing, userProfile } = useAuth()
   const [budgets, setBudgets] = useState([])
   const [categories, setCategories] = useState({
     income: [
@@ -34,7 +36,103 @@ function AppContent() {
   })
   const [selectedBudget, setSelectedBudget] = useState(null)
   const [viewMode, setViewMode] = useState("budgets")
+  const [previousViewBeforeGoals, setPreviousViewBeforeGoals] = useState("budgets")
+  const [goals, setGoals] = useState([
+    {
+      id: "goal-1",
+      name: "Emergency Fund",
+      targetAmount: 5000,
+      savedAmount: 2600,
+      dueDate: "2025-01-15",
+      milestones: [
+        { id: "goal-1-m1", name: "Starter Cushion", amount: 1000, completed: true },
+        { id: "goal-1-m2", name: "3 Months of Expenses", amount: 3000, completed: false },
+        { id: "goal-1-m3", name: "6 Months of Expenses", amount: 5000, completed: false },
+      ],
+    },
+    {
+      id: "goal-2",
+      name: "Home Down Payment",
+      targetAmount: 20000,
+      savedAmount: 8200,
+      dueDate: "2026-06-01",
+      milestones: [
+        { id: "goal-2-m1", name: "Research Neighborhoods", amount: 0, completed: true },
+        { id: "goal-2-m2", name: "Save 25%", amount: 5000, completed: true },
+        { id: "goal-2-m3", name: "Save 50%", amount: 10000, completed: false },
+        { id: "goal-2-m4", name: "Save 100%", amount: 20000, completed: false },
+      ],
+    },
+  ])
   const [isLoading, setIsLoading] = useState(false)
+
+  const resolvePlan = (profile) => {
+    if (!profile) return "Free"
+
+    const possibleKeys = [
+      "planTier",
+      "plan_tier",
+      "plan",
+      "subscriptionTier",
+      "subscription_tier",
+      "accountType",
+      "account_type",
+      "membership",
+      "membership_tier",
+    ]
+
+    for (const key of possibleKeys) {
+      const value = profile?.[key]
+      if (typeof value === "string" && value.trim()) {
+        return value
+      }
+    }
+
+    return "Free"
+  }
+
+  const planName = resolvePlan(userProfile)
+  const isPaidUser = planName?.toLowerCase?.() !== "free"
+
+  const navigateTo = (mode) => {
+    if (!mode || mode === viewMode) return
+
+    if (mode === "goals") {
+      setPreviousViewBeforeGoals(viewMode)
+      setViewMode("goals")
+      return
+    }
+
+    setPreviousViewBeforeGoals(mode)
+    setViewMode(mode)
+  }
+
+  const exitGoals = () => {
+    setViewMode(previousViewBeforeGoals || "budgets")
+  }
+
+  const handleCreateGoal = () => {
+    if (!isPaidUser) {
+      return
+    }
+
+    const newGoalId = `goal-${Date.now()}`
+    const newGoal = {
+      id: newGoalId,
+      name: "New Savings Goal",
+      targetAmount: 1000,
+      savedAmount: 0,
+      dueDate: new Date().toISOString().slice(0, 10),
+      milestones: [
+        { id: `${newGoalId}-m1`, name: "Define the goal", amount: 0, completed: true },
+        { id: `${newGoalId}-m2`, name: "Save the first $250", amount: 250, completed: false },
+        { id: `${newGoalId}-m3`, name: "Save the first $500", amount: 500, completed: false },
+        { id: `${newGoalId}-m4`, name: "Celebrate progress", amount: 1000, completed: false },
+      ],
+    }
+
+    setGoals((prev) => [newGoal, ...prev])
+  }
 
   // Load user data when authenticated
   useEffect(() => {
@@ -127,14 +225,22 @@ function AppContent() {
 
   return (
     <div className="container">
-      <Header title="Pocket Budget" showLogout={viewMode === "budgets"} />
+      <Header
+        title="Pocket Budget"
+        showLogout={viewMode === "budgets"}
+        activeView={viewMode}
+        onNavigate={navigateTo}
+        onExitGoals={exitGoals}
+        isPaidUser={isPaidUser}
+        planName={planName}
+      />
       <InstallPrompt />
 
       {viewMode === "budgets" && (
         <BudgetsScreen
           budgets={budgets}
           setSelectedBudget={setSelectedBudget}
-          setViewMode={setViewMode}
+          setViewMode={navigateTo}
           setBudgets={setBudgets}
           userId={user.id}
         />
@@ -143,7 +249,7 @@ function AppContent() {
         <BudgetDetailsScreen
           budget={selectedBudget}
           categories={categories}
-          setViewMode={setViewMode}
+          setViewMode={navigateTo}
           setBudgets={setBudgets}
           budgets={budgets}
           setSelectedBudget={setSelectedBudget}
@@ -155,10 +261,29 @@ function AppContent() {
           categories={categories}
           setCategories={handleCategoriesUpdate}
           budgets={budgets}
-          setViewMode={setViewMode}
+          setViewMode={navigateTo}
         />
       )}
-      {viewMode === "ai" && selectedBudget && <AIInsightsScreen budget={selectedBudget} setViewMode={setViewMode} />}
+      {viewMode === "ai" && selectedBudget && (
+        <AIInsightsScreen budget={selectedBudget} setViewMode={navigateTo} />
+      )}
+      {viewMode === "goals" && (
+        <GoalsScreen
+          goals={goals}
+          isPaidUser={isPaidUser}
+          onCreateGoal={handleCreateGoal}
+          onExit={exitGoals}
+          previousViewMode={previousViewBeforeGoals}
+          planName={planName}
+        />
+      )}
+      <Footer
+        activeView={viewMode}
+        onNavigate={navigateTo}
+        onExitGoals={exitGoals}
+        isPaidUser={isPaidUser}
+        planName={planName}
+      />
     </div>
   )
 }
