@@ -658,18 +658,33 @@ export default function BudgetDetailsScreen({
   }
 
   const saveTransaction = async () => {
-    if (!formTx.name.trim() || isNaN(formTx.amount) || !formTx.category.trim()) {
-      alert("Please fill in all required fields correctly")
+    const trimmedName = formTx.name.trim()
+    const trimmedCategory = formTx.category.trim()
+    const trimmedAmount = String(formTx.amount ?? "").trim()
+    const parsedAmount = Number.parseFloat(trimmedAmount)
+    const amountIsValid = trimmedAmount !== "" && Number.isFinite(parsedAmount)
+
+    const trimmedBudgeted =
+      formTx.budgetedAmount === null || formTx.budgetedAmount === undefined
+        ? ""
+        : String(formTx.budgetedAmount).trim()
+    const parsedBudgeted =
+      trimmedBudgeted === "" ? null : Number.parseFloat(trimmedBudgeted)
+    const budgetedIsValid =
+      parsedBudgeted === null || Number.isFinite(parsedBudgeted)
+
+    if (!trimmedName || !amountIsValid || !trimmedCategory || !budgetedIsValid) {
+      alert("Please fill in all required fields with valid numbers where applicable.")
       return
     }
 
     setLoading(true)
     try {
       const cleanedTx = {
-        name: formTx.name.trim(),
-        amount: Number.parseFloat(formTx.amount),
-        budgetedAmount: formTx.budgetedAmount ? Number.parseFloat(formTx.budgetedAmount) : null,
-        category: formTx.category,
+        name: trimmedName,
+        amount: parsedAmount,
+        budgetedAmount: parsedBudgeted,
+        category: trimmedCategory,
         type: resolveTypeKey(formTx.type),
         date: ensureISODate(formTx.date),
         receipt: formTx.receipt,
