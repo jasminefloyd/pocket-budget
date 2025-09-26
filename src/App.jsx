@@ -158,7 +158,9 @@ function AppContent() {
           setViewMode={setViewMode}
         />
       )}
-      {viewMode === "ai" && selectedBudget && <AIInsightsScreen budget={selectedBudget} setViewMode={setViewMode} />}
+      {viewMode === "ai" && selectedBudget && (
+        <AIInsightsScreen budget={selectedBudget} setViewMode={setViewMode} userId={user.id} />
+      )}
     </div>
   )
 }

@@ -392,3 +392,93 @@ export const updateUserCategories = async (userId, categories) => {
     .select()
   return { data, error }
 }
+
+const getDemoAIKey = (userId, budgetId, cycleId) => `${userId}:${budgetId}:${cycleId}`
+const demoAIInsightsCache = new Map()
+
+export const getCachedAIInsights = async (userId, budgetId, cycleId) => {
+  const isDemo = userId === DEMO_ADMIN.user.id || budgetId.startsWith("demo-budget-")
+
+  if (isDemo) {
+    const key = getDemoAIKey(userId, budgetId, cycleId)
+    return { data: demoAIInsightsCache.get(key) || null, error: null }
+  }
+
+  const { data, error } = await supabase
+    .from("ai_insights")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("budget_id", budgetId)
+    .eq("cycle_id", cycleId)
+    .maybeSingle()
+
+  if (error && error.code === "PGRST116") {
+    return { data: null, error: null }
+  }
+
+  return { data, error }
+}
+
+export const storeAIInsightsResult = async ({ userId, budgetId, cycleId, insights, dismissedIds, generatedAt }) => {
+  const isDemo = userId === DEMO_ADMIN.user.id || budgetId.startsWith("demo-budget-")
+  const record = {
+    insights,
+    dismissed_ids: dismissedIds,
+    generated_at: generatedAt,
+  }
+
+  if (isDemo) {
+    const key = getDemoAIKey(userId, budgetId, cycleId)
+    demoAIInsightsCache.set(key, record)
+    return { data: record, error: null }
+  }
+
+  const { data, error } = await supabase
+    .from("ai_insights")
+    .upsert(
+      [
+        {
+          user_id: userId,
+          budget_id: budgetId,
+          cycle_id: cycleId,
+          insights,
+          dismissed_ids: dismissedIds,
+          generated_at: generatedAt,
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      { onConflict: "user_id,budget_id,cycle_id" }
+    )
+    .select()
+    .maybeSingle()
+
+  return { data, error }
+}
+
+export const updateDismissedInsightIds = async ({ userId, budgetId, cycleId, dismissedIds }) => {
+  const isDemo = userId === DEMO_ADMIN.user.id || budgetId.startsWith("demo-budget-")
+
+  if (isDemo) {
+    const key = getDemoAIKey(userId, budgetId, cycleId)
+    const existing = demoAIInsightsCache.get(key)
+    if (existing) {
+      demoAIInsightsCache.set(key, {
+        ...existing,
+        dismissed_ids: dismissedIds,
+      })
+    }
+    return { error: null }
+  }
+
+  const { error } = await supabase
+    .from("ai_insights")
+    .update({
+      dismissed_ids: dismissedIds,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId)
+    .eq("budget_id", budgetId)
+    .eq("cycle_id", cycleId)
+
+  return { error }
+}
