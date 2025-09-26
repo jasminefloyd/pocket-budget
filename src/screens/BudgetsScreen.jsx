@@ -2,8 +2,21 @@
 
 import { useState } from "react"
 import { createBudget, updateBudget, deleteBudget } from "../lib/supabase"
+import CashBurnDashboard from "../components/CashBurnDashboard"
 
-export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode, setBudgets, userId }) {
+export default function BudgetsScreen({
+  budgets,
+  setSelectedBudget,
+  setViewMode,
+  setBudgets,
+  userId,
+  cashBurnReport,
+  cashBurnHistory,
+  cashBurnPreferences,
+  onSaveCashBurnPreferences,
+  activeNudges,
+  onDismissNudge,
+}) {
   const [editingBudgetId, setEditingBudgetId] = useState(null)
   const [budgetNameInput, setBudgetNameInput] = useState("")
   const [openMenuId, setOpenMenuId] = useState(null)
@@ -128,6 +141,15 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
       <div className="header-section">
         <p className="tagline">Manage your budgets and stay on top of your finances.</p>
       </div>
+
+      <CashBurnDashboard
+        report={cashBurnReport}
+        history={cashBurnHistory}
+        preferences={cashBurnPreferences}
+        onSavePreferences={onSaveCashBurnPreferences}
+        activeNudges={activeNudges}
+        onDismissNudge={onDismissNudge}
+      />
 
       {budgets.length === 0 ? (
         <div className="empty-state">

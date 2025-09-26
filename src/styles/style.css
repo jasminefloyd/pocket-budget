@@ -2756,3 +2756,333 @@ select.input {
     text-align: center;
   }
 }
+/* Cash burn dashboard */
+.cashburn-section {
+  margin: 1.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.cashburn-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cashburn-header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.cashburn-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+  color: var(--gray-500);
+}
+
+.pace-chip {
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--gray-200);
+  color: var(--gray-700);
+  white-space: nowrap;
+}
+
+.pace-chip--overpace {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--red-600);
+}
+
+.pace-chip--underpace {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--green-600);
+}
+
+.pace-chip--on_track,
+.pace-chip--neutral {
+  background: var(--gray-200);
+  color: var(--gray-700);
+}
+
+.cashburn-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 720px) {
+  .cashburn-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.cashburn-card {
+  background: white;
+  border-radius: var(--radius-xl);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cashburn-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.cashburn-card-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.cashburn-period {
+  font-size: 0.85rem;
+  color: var(--gray-500);
+}
+
+.cashburn-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.cashburn-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gray-500);
+}
+
+.cashburn-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0.25rem 0 0;
+}
+
+.cashburn-value--muted {
+  color: var(--gray-500);
+}
+
+.cashburn-value--bad {
+  color: var(--red-500);
+}
+
+.cashburn-value--good {
+  color: var(--green-500);
+}
+
+.cashburn-message {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--gray-600);
+}
+
+.cashburn-history {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cashburn-history-label {
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cashburn-category-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cashburn-category-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.cashburn-category-name {
+  font-weight: 600;
+  margin: 0;
+}
+
+.cashburn-category-meta {
+  margin: 0.15rem 0 0;
+  font-size: 0.85rem;
+  color: var(--gray-500);
+}
+
+.cashburn-category-trend {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+}
+
+.cashburn-category-trend.trend-up {
+  color: var(--red-500);
+}
+
+.cashburn-category-trend.trend-down {
+  color: var(--green-600);
+}
+
+.cashburn-empty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--gray-500);
+}
+
+.sparkline {
+  width: 100px;
+  height: 48px;
+}
+
+.sparkline--empty {
+  background: var(--gray-100);
+  border-radius: var(--radius-md);
+  height: 48px;
+  width: 100px;
+}
+
+.sparkline-path {
+  fill: none;
+  stroke: var(--primary-500);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cashburn-nudges {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cashburn-nudge {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-lg);
+  background: var(--gray-100);
+}
+
+.cashburn-nudge--warning {
+  background: rgba(245, 158, 11, 0.15);
+}
+
+.cashburn-nudge--critical {
+  background: rgba(239, 68, 68, 0.18);
+}
+
+.cashburn-nudge-message {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.cashburn-nudge-meta {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: var(--gray-500);
+}
+
+.cashburn-nudge-dismiss {
+  border: none;
+  background: transparent;
+  color: var(--primary-600);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cashburn-nudge-dismiss:hover {
+  text-decoration: underline;
+}
+
+.cashburn-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cashburn-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.cashburn-form-field select,
+.cashburn-form-field input[type="time"],
+.cashburn-form-field input[type="range"] {
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200);
+  font-size: 0.9rem;
+}
+
+.cashburn-form-field input[type="range"] {
+  padding: 0;
+}
+
+.cashburn-form-field--inline {
+  flex-direction: row;
+  gap: 0.75rem;
+}
+
+.cashburn-form-field--inline label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.cashburn-toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.cashburn-sponsored {
+  background: linear-gradient(135deg, var(--primary-500), var(--purple-600));
+  color: white;
+  border-radius: var(--radius-xl);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cashburn-sponsored h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.cashburn-sponsored p {
+  margin: 0;
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+
+.cashburn-sponsored-badge {
+  align-self: flex-start;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
