@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react"
 import PropTypes from "prop-types"
-import { supabase, getCurrentUser, createUserProfile, getUserProfile } from "../lib/supabase"
+import { supabase, getCurrentUser, createUserProfile, getUserProfile } from '../lib/supabase'
 
 const AuthContext = createContext({})
 
