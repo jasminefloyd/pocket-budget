@@ -13,7 +13,7 @@ import Header from "./components/Header"
 import InstallPrompt from "./components/InstallPrompt"
 
 function AppContent() {
-  const { user, loading: authLoading, initializing } = useAuth()
+  const { user, userProfile, loading: authLoading, initializing } = useAuth()
   const [budgets, setBudgets] = useState([])
   const [categories, setCategories] = useState({
     income: [
@@ -125,6 +125,10 @@ function AppContent() {
     return <LoadingScreen message="Setting up your account" />
   }
 
+  const adsEnabled = userProfile?.ads_enabled ?? true
+  const subscriptionTier = userProfile?.subscription_tier ?? "free"
+  const isPaidSubscriber = subscriptionTier !== "free"
+
   return (
     <div className="container">
       <Header title="Pocket Budget" showLogout={viewMode === "budgets"} />
@@ -137,6 +141,8 @@ function AppContent() {
           setViewMode={setViewMode}
           setBudgets={setBudgets}
           userId={user.id}
+          adsEnabled={adsEnabled}
+          isPaidSubscriber={isPaidSubscriber}
         />
       )}
       {viewMode === "details" && selectedBudget && (
@@ -148,6 +154,8 @@ function AppContent() {
           budgets={budgets}
           setSelectedBudget={setSelectedBudget}
           userId={user.id}
+          adsEnabled={adsEnabled}
+          isPaidSubscriber={isPaidSubscriber}
         />
       )}
       {viewMode === "categories" && (
@@ -156,9 +164,20 @@ function AppContent() {
           setCategories={handleCategoriesUpdate}
           budgets={budgets}
           setViewMode={setViewMode}
+          adsEnabled={adsEnabled}
+          isPaidSubscriber={isPaidSubscriber}
+          userId={user.id}
         />
       )}
-      {viewMode === "ai" && selectedBudget && <AIInsightsScreen budget={selectedBudget} setViewMode={setViewMode} />}
+      {viewMode === "ai" && selectedBudget && (
+        <AIInsightsScreen
+          budget={selectedBudget}
+          setViewMode={setViewMode}
+          adsEnabled={adsEnabled}
+          isPaidSubscriber={isPaidSubscriber}
+          userId={user.id}
+        />
+      )}
     </div>
   )
 }

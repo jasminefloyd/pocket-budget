@@ -1,9 +1,18 @@
 "use client"
 
 import { useState } from "react"
+import SponsoredCard from "../components/SponsoredCard"
 import { createBudget, updateBudget, deleteBudget } from "../lib/supabase"
 
-export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode, setBudgets, userId }) {
+export default function BudgetsScreen({
+  budgets,
+  setSelectedBudget,
+  setViewMode,
+  setBudgets,
+  userId,
+  adsEnabled,
+  isPaidSubscriber,
+}) {
   const [editingBudgetId, setEditingBudgetId] = useState(null)
   const [budgetNameInput, setBudgetNameInput] = useState("")
   const [openMenuId, setOpenMenuId] = useState(null)
@@ -127,6 +136,15 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
     <div>
       <div className="header-section">
         <p className="tagline">Manage your budgets and stay on top of your finances.</p>
+      </div>
+
+      <div className="ad-slot">
+        <SponsoredCard
+          placement="budgets_screen"
+          userId={userId}
+          adsEnabled={adsEnabled}
+          isPaid={isPaidSubscriber}
+        />
       </div>
 
       {budgets.length === 0 ? (

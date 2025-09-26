@@ -33,6 +33,8 @@ const DEMO_ADMIN = {
     email: "test@me.com",
     full_name: "Demo Admin",
     created_at: new Date().toISOString(),
+    ads_enabled: false,
+    subscription_tier: "pro",
   },
 }
 
@@ -143,6 +145,8 @@ export const createUserProfile = async (userId, email, fullName) => {
         email,
         full_name: fullName,
         created_at: new Date().toISOString(),
+        ads_enabled: true,
+        subscription_tier: "free",
       },
     ])
     .select()
@@ -157,6 +161,75 @@ export const getUserProfile = async (userId) => {
 
   const { data, error } = await supabase.from("user_profiles").select("*").eq("id", userId).single()
   return { data, error }
+}
+
+export const fetchSponsoredCreative = async (placement) => {
+  try {
+    const { data, error } = await supabase
+      .from("sponsored_creatives")
+      .select("*")
+      .eq("placement", placement)
+      .eq("is_active", true)
+      .order("priority", { ascending: false })
+      .limit(1)
+
+    if (error) {
+      throw error
+    }
+
+    return { data: data?.[0] ?? null, error: null }
+  } catch (error) {
+    console.error("Error fetching sponsored creative:", error)
+    return { data: null, error }
+  }
+}
+
+const isMockCreative = (creativeId) => !creativeId || String(creativeId).startsWith("mock-")
+
+export const recordAdImpression = async ({ creativeId, placement, userId }) => {
+  if (isMockCreative(creativeId)) {
+    return { data: null, error: null }
+  }
+
+  try {
+    const { data, error } = await supabase.rpc("record_ad_impression", {
+      creative_id: creativeId,
+      placement,
+      viewer_id: userId,
+    })
+
+    if (error) {
+      throw error
+    }
+
+    return { data, error: null }
+  } catch (error) {
+    console.error("Error recording ad impression:", error)
+    return { data: null, error }
+  }
+}
+
+export const recordAdClick = async ({ creativeId, placement, userId }) => {
+  if (isMockCreative(creativeId)) {
+    return { data: null, error: null }
+  }
+
+  try {
+    const { data, error } = await supabase.rpc("record_ad_click", {
+      creative_id: creativeId,
+      placement,
+      viewer_id: userId,
+    })
+
+    if (error) {
+      throw error
+    }
+
+    return { data, error: null }
+  } catch (error) {
+    console.error("Error recording ad click:", error)
+    return { data: null, error }
+  }
 }
 
 // Demo data storage (in-memory for demo admin)

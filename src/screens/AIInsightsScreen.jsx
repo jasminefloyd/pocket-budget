@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
+import SponsoredCard from "../components/SponsoredCard"
 
-export default function AIInsightsScreen({ budget, setViewMode }) {
+export default function AIInsightsScreen({ budget, setViewMode, adsEnabled, isPaidSubscriber, userId }) {
   const [insights, setInsights] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -301,6 +302,14 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
           ← Back to Details
         </button>
         <h1 className="header">AI Financial Report</h1>
+        <div className="ad-slot">
+          <SponsoredCard
+            placement="ai_insights_loading"
+            userId={userId}
+            adsEnabled={adsEnabled}
+            isPaid={isPaidSubscriber}
+          />
+        </div>
         <div className="ai-loading">
           <div className="loading-spinner"></div>
           <p>Analyzing your financial data...</p>
@@ -317,6 +326,14 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
           ← Back to Details
         </button>
         <h1 className="header">AI Financial Report</h1>
+        <div className="ad-slot">
+          <SponsoredCard
+            placement="ai_insights_error"
+            userId={userId}
+            adsEnabled={adsEnabled}
+            isPaid={isPaidSubscriber}
+          />
+        </div>
         <div className="error-state">
           <p className="error-message">{error}</p>
           <button className="primary-button" onClick={generateAIInsights}>
@@ -333,6 +350,14 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
         ← Back to Details
       </button>
       <h1 className="header">AI Financial Report</h1>
+      <div className="ad-slot">
+        <SponsoredCard
+          placement="ai_insights"
+          userId={userId}
+          adsEnabled={adsEnabled}
+          isPaid={isPaidSubscriber}
+        />
+      </div>
 
       {/* Compact Health Score */}
       <div className="compact-health-score">

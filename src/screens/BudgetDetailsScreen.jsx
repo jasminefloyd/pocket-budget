@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import SponsoredCard from "../components/SponsoredCard"
 import { createTransaction, updateTransaction, updateBudget } from "../lib/supabase"
 
 export default function BudgetDetailsScreen({
@@ -11,6 +12,8 @@ export default function BudgetDetailsScreen({
   budgets,
   setSelectedBudget,
   userId,
+  adsEnabled,
+  isPaidSubscriber,
 }) {
   const [tab, setTab] = useState("expenses")
   const [showModal, setShowModal] = useState(false)
@@ -303,6 +306,15 @@ export default function BudgetDetailsScreen({
         <button className="ai-insights-button primary-button" onClick={() => setViewMode("ai")}>
           🧠 AI Finance Report
         </button>
+      </div>
+
+      <div className="ad-slot">
+        <SponsoredCard
+          placement="budget_details"
+          userId={userId}
+          adsEnabled={adsEnabled}
+          isPaid={isPaidSubscriber}
+        />
       </div>
 
       <input

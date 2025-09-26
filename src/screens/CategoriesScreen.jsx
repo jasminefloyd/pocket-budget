@@ -1,6 +1,15 @@
 import { useState } from "react"
+import SponsoredCard from "../components/SponsoredCard"
 
-export default function CategoriesScreen({ categories, setCategories, budgets, setViewMode }) {
+export default function CategoriesScreen({
+  categories,
+  setCategories,
+  budgets,
+  setViewMode,
+  adsEnabled,
+  isPaidSubscriber,
+  userId,
+}) {
   const [tab, setTab] = useState("expense")
   const [showAddModal, setShowAddModal] = useState(false)
   const [newCat, setNewCat] = useState({ name: "", icon: "💲" })
@@ -92,6 +101,15 @@ export default function CategoriesScreen({ categories, setCategories, budgets, s
         ← Back to Budgets
       </button>
       <h1 className="header">Manage Categories</h1>
+
+      <div className="ad-slot">
+        <SponsoredCard
+          placement="categories_screen"
+          userId={userId}
+          adsEnabled={adsEnabled}
+          isPaid={isPaidSubscriber}
+        />
+      </div>
 
       {/* Tabs */}
       <div className="tabRow">
