@@ -153,14 +153,14 @@ export const supabase = {
   },
 
   from: (table) => ({
-    select: (columns = "*") => ({
-      eq: (column, value) => ({
+    select: (_columns = "*") => ({
+      eq: (_column, _value) => ({
         single: async () => {
           await delay()
           const data = JSON.parse(localStorage.getItem(`${table}_${currentUser?.id}`) || "null")
           return { data, error: data ? null : { code: "PGRST116" } }
         },
-        order: (column, options) => ({
+        order: (_orderColumn, _options) => ({
           async then(resolve) {
             await delay()
             const allData = JSON.parse(localStorage.getItem(`${table}_${currentUser?.id}`) || "[]")
@@ -170,7 +170,7 @@ export const supabase = {
           },
         }),
       }),
-      order: (column, options) => ({
+      order: (_orderColumn, _options) => ({
         async then(resolve) {
           await delay()
           const allData = JSON.parse(localStorage.getItem(`${table}_${currentUser?.id}`) || "[]")
@@ -208,7 +208,7 @@ export const supabase = {
     }),
 
     update: (data) => ({
-      eq: (column, value) => ({
+      eq: (_column, value) => ({
         select: () => ({
           async then(resolve) {
             await delay()
@@ -231,7 +231,7 @@ export const supabase = {
     }),
 
     delete: () => ({
-      eq: (column, value) => ({
+      eq: (_column, value) => ({
         async then(resolve) {
           await delay()
 

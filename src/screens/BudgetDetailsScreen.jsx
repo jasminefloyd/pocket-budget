@@ -1,21 +1,13 @@
 "use client"
 
 import { useState } from "react"
+import PropTypes from "prop-types"
 import { createTransaction, updateTransaction, updateBudget } from "../lib/supabase"
 
-export default function BudgetDetailsScreen({
-  budget,
-  categories,
-  setViewMode,
-  setBudgets,
-  budgets,
-  setSelectedBudget,
-  userId,
-}) {
+export default function BudgetDetailsScreen({ budget, categories, setViewMode, setBudgets, budgets, setSelectedBudget }) {
   const [tab, setTab] = useState("expenses")
   const [showModal, setShowModal] = useState(false)
   const [editingTx, setEditingTx] = useState(null)
-  const [expandedReceipts, setExpandedReceipts] = useState({})
   const [currentPage, setCurrentPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [formTx, setFormTx] = useState({
@@ -38,7 +30,7 @@ export default function BudgetDetailsScreen({
     return "income"
   }
 
-  const openAddModal = (preset = {}, typeArg) => {
+  const openAddModal = (typeArg) => {
     const resolvedType = resolveTypeKey(typeArg || tab)
     setFormTx({
       name: "",
@@ -134,13 +126,6 @@ export default function BudgetDetailsScreen({
     } catch (error) {
       console.error("Error updating budget name:", error)
     }
-  }
-
-  const toggleReceipt = (txId) => {
-    setExpandedReceipts((prev) => ({
-      ...prev,
-      [txId]: !prev[txId],
-    }))
   }
 
   const totalIncome = (budget.transactions || [])
@@ -478,7 +463,7 @@ export default function BudgetDetailsScreen({
         {allTransactions.length === 0 ? (
           <div className="empty-state">
             <p>No {resolveTypeKey(tab)} transactions yet.</p>
-            <button className="primary-button" onClick={() => openAddModal({}, tab)}>
+            <button className="primary-button" onClick={() => openAddModal(tab)}>
               Add Your First {resolveTypeKey(tab) === "expense" ? "Expense" : "Income"}
             </button>
           </div>
@@ -517,7 +502,7 @@ export default function BudgetDetailsScreen({
         )}
       </div>
 
-      <button className="fab" onClick={() => openAddModal({}, tab)}>
+      <button className="fab" onClick={() => openAddModal(tab)}>
         +
       </button>
 
@@ -630,4 +615,48 @@ export default function BudgetDetailsScreen({
       )}
     </div>
   )
+}
+
+const transactionShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  amount: PropTypes.number.isRequired,
+  budgetedAmount: PropTypes.number,
+  category: PropTypes.string.isRequired,
+  type: PropTypes.oneOf(["income", "expense"]).isRequired,
+  date: PropTypes.string.isRequired,
+  receipt: PropTypes.string,
+})
+
+const categoryShape = PropTypes.shape({
+  name: PropTypes.string.isRequired,
+  icon: PropTypes.string.isRequired,
+})
+
+BudgetDetailsScreen.propTypes = {
+  budget: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    name: PropTypes.string.isRequired,
+    transactions: PropTypes.arrayOf(transactionShape),
+    categoryBudgets: PropTypes.arrayOf(
+      PropTypes.shape({
+        category: PropTypes.string.isRequired,
+        budgetedAmount: PropTypes.number.isRequired,
+      }),
+    ),
+  }).isRequired,
+  categories: PropTypes.shape({
+    income: PropTypes.arrayOf(categoryShape).isRequired,
+    expense: PropTypes.arrayOf(categoryShape).isRequired,
+  }).isRequired,
+  setViewMode: PropTypes.func.isRequired,
+  setBudgets: PropTypes.func.isRequired,
+  budgets: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      name: PropTypes.string.isRequired,
+      transactions: PropTypes.arrayOf(transactionShape),
+    }),
+  ).isRequired,
+  setSelectedBudget: PropTypes.func.isRequired,
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import PropTypes from "prop-types"
 import { createBudget, updateBudget, deleteBudget } from "../lib/supabase"
 
 export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode, setBudgets, userId }) {
@@ -295,4 +296,36 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
       )}
     </div>
   )
+}
+
+const transactionShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  amount: PropTypes.number.isRequired,
+  budgetedAmount: PropTypes.number,
+  category: PropTypes.string.isRequired,
+  type: PropTypes.oneOf(["income", "expense"]).isRequired,
+  date: PropTypes.string.isRequired,
+  receipt: PropTypes.string,
+})
+
+const categoryBudgetShape = PropTypes.shape({
+  category: PropTypes.string.isRequired,
+  budgetedAmount: PropTypes.number.isRequired,
+})
+
+BudgetsScreen.propTypes = {
+  budgets: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      name: PropTypes.string.isRequired,
+      createdAt: PropTypes.string.isRequired,
+      transactions: PropTypes.arrayOf(transactionShape),
+      categoryBudgets: PropTypes.arrayOf(categoryBudgetShape),
+    }),
+  ).isRequired,
+  setSelectedBudget: PropTypes.func.isRequired,
+  setViewMode: PropTypes.func.isRequired,
+  setBudgets: PropTypes.func.isRequired,
+  userId: PropTypes.string.isRequired,
 }

@@ -70,12 +70,6 @@ export default function LoginScreen() {
     }
   }
 
-  const handleDemoLogin = () => {
-    setEmail("test@me.com")
-    setPassword("pass123")
-    setIsSignUp(false)
-  }
-
   return (
     <div className="login-container">
       <div className="login-content">
