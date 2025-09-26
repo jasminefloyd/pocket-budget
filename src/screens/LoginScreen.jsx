@@ -16,7 +16,7 @@ export default function LoginScreen() {
     setError("")
 
     try {
-      const { error: demoError } = await signIn("test@me.com", "pass123")
+      const { error: demoError } = await signIn("fulltest@test.com", "fullpass123")
       if (demoError) {
         setError(demoError.message || "Unable to start demo session")
       }
@@ -111,7 +111,7 @@ export default function LoginScreen() {
             }}
             disabled={loading}
           >
-            🎯 Demo Login (test@me.com)
+            🎯 Demo Login (fulltest@test.com)
           </button>
 
           <form onSubmit={handleEmailAuth} className="login-form">
