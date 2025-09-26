@@ -12,6 +12,7 @@ import LoadingScreen from "./components/LoadingScreen"
 import LoginScreen from "./screens/LoginScreen"
 import Header from "./components/Header"
 import InstallPrompt from "./components/InstallPrompt"
+import Footer from "./components/Footer"
 import {
   createDefaultBudgetMetadata,
   getBudgetMetadata,
@@ -274,8 +275,9 @@ function AppContent() {
           setViewMode={setViewMode}
         />
       )}
-
       {viewMode === "ai" && activeBudget && <AIInsightsScreen budget={activeBudget} setViewMode={setViewMode} />}
+
+      <Footer viewMode={viewMode} setViewMode={setViewMode} />
     </div>
   )
 }
