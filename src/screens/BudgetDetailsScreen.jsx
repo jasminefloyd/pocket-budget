@@ -72,6 +72,7 @@ export default function BudgetDetailsScreen({
   })
 
   const [selectedSlice, setSelectedSlice] = useState(null)
+  const [budgetNameDraft, setBudgetNameDraft] = useState(budget.name || "")
   const [allocationDraft, setAllocationDraft] = useState(() =>
     (budget.categoryBudgets || []).map((entry) => ({ ...entry })),
   )
@@ -116,6 +117,10 @@ export default function BudgetDetailsScreen({
     setAllocationDraft((budget.categoryBudgets || []).map((entry) => ({ ...entry })))
     setAllocationDirty(false)
   }, [budget.id, budget.categoryBudgets])
+
+  useEffect(() => {
+    setBudgetNameDraft(budget.name || "")
+  }, [budget.id, budget.name])
 
   useEffect(() => {
     setTrackedCategories(new Set(insightsPreferences.trackedCategories || []))
@@ -664,22 +669,51 @@ export default function BudgetDetailsScreen({
     }
   }
 
-  const handleBudgetNameChange = async (newName) => {
+  const handleBudgetNameSubmit = async () => {
+    const trimmed = budgetNameDraft.trim()
+
+    if (!trimmed) {
+      setBudgetNameDraft(budget.name || "")
+      return
+    }
+
+    if (trimmed === (budget.name || "").trim()) {
+      setBudgetNameDraft(budget.name || "")
+      return
+    }
+
     try {
       const { error } = await updateBudget(budget.id, {
-        name: newName,
+        name: trimmed,
         categoryBudgets: budget.categoryBudgets,
       })
 
       if (error) {
         console.error("Error updating budget name:", error)
-      } else {
-        const updatedBudgets = budgets.map((b) => (b.id === budget.id ? { ...b, name: newName } : b))
-        setBudgets(updatedBudgets)
-        setSelectedBudget(updatedBudgets.find((b) => b.id === budget.id))
+        setBudgetNameDraft(budget.name || "")
+        return
       }
+
+      let updatedBudgetState = { ...budget, name: trimmed }
+      setBudgets((prev) =>
+        prev.map((b) => {
+          if (b.id !== budget.id) return b
+          updatedBudgetState = { ...b, ...budget, name: trimmed }
+          return updatedBudgetState
+        }),
+      )
+
+      setSelectedBudget((prevSelected) => {
+        if (prevSelected?.id === budget.id) {
+          return updatedBudgetState
+        }
+        return prevSelected
+      })
+
+      setBudgetNameDraft(trimmed)
     } catch (error) {
       console.error("Error updating budget name:", error)
+      setBudgetNameDraft(budget.name || "")
     }
   }
 
@@ -860,8 +894,15 @@ export default function BudgetDetailsScreen({
 
       <input
         className="input budget-title-input no-border"
-        value={budget.name}
-        onChange={(e) => handleBudgetNameChange(e.target.value)}
+        value={budgetNameDraft}
+        onChange={(e) => setBudgetNameDraft(e.target.value)}
+        onBlur={handleBudgetNameSubmit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault()
+            e.currentTarget.blur()
+          }
+        }}
         placeholder="Budget Name"
       />
 
