@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
 import { getBudgets, getUserCategories, updateUserCategories } from "./lib/supabase"
 import BudgetsScreen from "./screens/BudgetsScreen"
@@ -12,6 +12,12 @@ import LoadingScreen from "./components/LoadingScreen"
 import LoginScreen from "./screens/LoginScreen"
 import Header from "./components/Header"
 import InstallPrompt from "./components/InstallPrompt"
+import {
+  createDefaultBudgetMetadata,
+  getBudgetMetadata,
+  removeBudgetMetadata,
+  updateBudgetMetadata,
+} from "./lib/budgetMetadata"
 
 const DEFAULT_CATEGORIES = {
   income: [
@@ -38,13 +44,55 @@ const cloneDefaultCategories = () => ({
 
 function AppContent() {
   const { user, loading: authLoading, initializing, status: authStatus } = useAuth()
-  const [budgets, setBudgets] = useState([])
+  const [budgets, setBudgetsState] = useState([])
   const [categories, setCategories] = useState(cloneDefaultCategories)
   const [selectedBudget, setSelectedBudget] = useState(null)
   const [viewMode, setViewMode] = useState("budgets")
   const [dataPhase, setDataPhase] = useState("idle")
 
   const shouldShowAuthLoading = initializing || authLoading || authStatus === "auth-transition"
+
+  const applyMetadata = useCallback((budget, metadataOverride) => {
+    if (!budget?.id) return budget
+    const metadata = metadataOverride || budget.metadata || getBudgetMetadata(budget.id)
+    const defaults = createDefaultBudgetMetadata()
+    const safeMetadata = {
+      ...defaults,
+      ...metadata,
+      cycle: { ...defaults.cycle, ...(metadata?.cycle || {}) },
+      ads: { ...defaults.ads, ...(metadata?.ads || {}) },
+      insights: {
+        ...defaults.insights,
+        ...(metadata?.insights || {}),
+        nudges: {
+          ...defaults.insights.nudges,
+          ...(metadata?.insights?.nudges || {}),
+        },
+      },
+      dismissals: { ...defaults.dismissals, ...(metadata?.dismissals || {}) },
+    }
+
+    return {
+      ...budget,
+      metadata: safeMetadata,
+      cycleMetadata: safeMetadata.cycle,
+      changeLog: safeMetadata.changeLog || [],
+      adsEnabled: safeMetadata.ads?.enabled !== false,
+      insightsPreferences: safeMetadata.insights,
+      dismissedInsights: safeMetadata.dismissals,
+    }
+  }, [])
+
+  const setBudgets = useCallback(
+    (updater) => {
+      setBudgetsState((prev) => {
+        const nextValue = typeof updater === "function" ? updater(prev) : updater
+        if (!Array.isArray(nextValue)) return prev
+        return nextValue.map((budget) => applyMetadata(budget, budget?.metadata))
+      })
+    },
+    [applyMetadata],
+  )
 
   useEffect(() => {
     if (!user) {
@@ -93,7 +141,7 @@ function AppContent() {
             receipt: tx.receipt_url ?? null,
           })),
         }))
-        setBudgets(normalizedBudgets)
+        setBudgets(normalizedBudgets.map((budget) => applyMetadata(budget)))
       } else {
         console.error("Unexpected error resolving budgets:", budgetResult.reason)
       }
@@ -129,6 +177,35 @@ function AppContent() {
       console.error("Error updating categories:", error)
     }
   }
+
+  const handleBudgetMetadataUpdate = useCallback(
+    (budgetId, updater) => {
+      if (!budgetId) return
+      const nextMetadata = updateBudgetMetadata(budgetId, updater)
+      setBudgets((prev) =>
+        prev.map((budget) => (budget.id === budgetId ? applyMetadata({ ...budget }, nextMetadata) : budget)),
+      )
+      setSelectedBudget((current) => {
+        if (!current || current.id !== budgetId) return current
+        return applyMetadata({ ...current }, nextMetadata)
+      })
+    },
+    [applyMetadata, setBudgets],
+  )
+
+  const handleBudgetMetadataRemoval = useCallback(
+    (budgetId) => {
+      if (!budgetId) return
+      removeBudgetMetadata(budgetId)
+      setSelectedBudget((current) => {
+        if (current?.id === budgetId) {
+          return null
+        }
+        return current
+      })
+    },
+    [],
+  )
 
   const activeBudget = useMemo(
     () => budgets.find((budget) => budget.id === selectedBudget?.id) || selectedBudget,
@@ -168,6 +245,8 @@ function AppContent() {
           setViewMode={setViewMode}
           setBudgets={setBudgets}
           userId={user.id}
+          onMetadataChange={handleBudgetMetadataUpdate}
+          onMetadataRemove={handleBudgetMetadataRemoval}
         />
       )}
 
@@ -183,6 +262,7 @@ function AppContent() {
           setBudgets={setBudgets}
           budgets={budgets}
           setSelectedBudget={setSelectedBudget}
+          onMetadataChange={handleBudgetMetadataUpdate}
         />
       )}
 

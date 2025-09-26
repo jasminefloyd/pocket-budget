@@ -15,6 +15,7 @@ import { useAuth } from "../contexts/AuthContext"
 const DEFAULT_MILESTONES = [25, 50, 75, 100]
 const MS_IN_DAY = 1000 * 60 * 60 * 24
 const MS_IN_WEEK = MS_IN_DAY * 7
+const PAID_PLAN_TIERS = ["trial", "paid", "pro", "premium", "plus"]
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(value || 0))
@@ -119,7 +120,10 @@ const getGoalMetrics = (goal) => {
 }
 
 export default function GoalsScreen({ setViewMode, budgets = [], setBudgets }) {
-  const { user } = useAuth()
+  const { user, userProfile } = useAuth()
+  const planTier = userProfile?.plan_tier || userProfile?.planTier || "free"
+  const planTierNormalized = String(planTier).toLowerCase()
+  const canManageGoals = PAID_PLAN_TIERS.includes(planTierNormalized)
   const [goals, setGoals] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -178,6 +182,11 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets }) {
   const handleCreateGoal = async (event) => {
     event.preventDefault()
     if (!user) return
+
+    if (!canManageGoals) {
+      alert("Goal creation is available during trial or paid plans.")
+      return
+    }
 
     const targetAmount = parseFloat(goalForm.targetAmount)
     if (!goalForm.name.trim() || Number.isNaN(targetAmount) || targetAmount <= 0) {
@@ -297,6 +306,11 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets }) {
     const amount = parseFloat(keypadValue)
     if (!selectedGoalId || Number.isNaN(amount) || amount <= 0) {
       alert("Enter a valid contribution amount")
+      return
+    }
+
+    if (!canManageGoals) {
+      alert("Logging contributions is available during trial or paid plans.")
       return
     }
 
@@ -436,6 +450,12 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets }) {
         <p className="tagline">Track milestones, weekly pace, and stay motivated.</p>
       </div>
 
+      {!canManageGoals && (
+        <div className="plan-teaser goals-teaser">
+          Goal creation and contribution tracking unlock during your free trial or with Pocket Budget Plus.
+        </div>
+      )}
+
       {error && <div className="error-banner">{error}</div>}
 
       {loading ? (
@@ -542,6 +562,10 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets }) {
           if (!selectedGoalId && goals.length) {
             setSelectedGoalId(goals[0].id)
           }
+          if (!canManageGoals) {
+            alert("Upgrade or start a trial to log contributions in real time.")
+            return
+          }
           setKeypadOpen(true)
         }}
         title="Log contribution"
@@ -557,57 +581,64 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets }) {
         <div className="modal-backdrop">
           <div className="modal">
             <h3>Create goal</h3>
+            {!canManageGoals && (
+              <div className="plan-teaser">
+                Goal creation is part of Pocket Budget Plus. Start a trial to map savings to your next big milestone.
+              </div>
+            )}
             <form onSubmit={handleCreateGoal} className="goal-form">
-              <label>
-                Goal name
-                <input
-                  type="text"
-                  value={goalForm.name}
-                  onChange={(event) => setGoalForm((prev) => ({ ...prev, name: event.target.value }))}
-                  placeholder="Emergency fund"
-                  required
-                />
-              </label>
-              <label>
-                Target amount
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={goalForm.targetAmount}
-                  onChange={(event) => setGoalForm((prev) => ({ ...prev, targetAmount: event.target.value }))}
-                  placeholder="5000"
-                  required
-                />
-              </label>
-              <label>
-                Target date
-                <input
-                  type="date"
-                  value={goalForm.targetDate}
-                  onChange={(event) => setGoalForm((prev) => ({ ...prev, targetDate: event.target.value }))}
-                />
-              </label>
-              <label>
-                Link to budget
-                <select
-                  value={goalForm.linkedBudgetId}
-                  onChange={(event) => setGoalForm((prev) => ({ ...prev, linkedBudgetId: event.target.value }))}
-                >
-                  <option value="">Not linked</option>
-                  {budgets.map((budget) => (
-                    <option key={budget.id} value={budget.id}>
-                      {budget.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <fieldset disabled={!canManageGoals}>
+                <label>
+                  Goal name
+                  <input
+                    type="text"
+                    value={goalForm.name}
+                    onChange={(event) => setGoalForm((prev) => ({ ...prev, name: event.target.value }))}
+                    placeholder="Emergency fund"
+                    required
+                  />
+                </label>
+                <label>
+                  Target amount
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={goalForm.targetAmount}
+                    onChange={(event) => setGoalForm((prev) => ({ ...prev, targetAmount: event.target.value }))}
+                    placeholder="5000"
+                    required
+                  />
+                </label>
+                <label>
+                  Target date
+                  <input
+                    type="date"
+                    value={goalForm.targetDate}
+                    onChange={(event) => setGoalForm((prev) => ({ ...prev, targetDate: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  Link to budget
+                  <select
+                    value={goalForm.linkedBudgetId}
+                    onChange={(event) => setGoalForm((prev) => ({ ...prev, linkedBudgetId: event.target.value }))}
+                  >
+                    <option value="">Not linked</option>
+                    {budgets.map((budget) => (
+                      <option key={budget.id} value={budget.id}>
+                        {budget.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </fieldset>
 
               <div className="modal-actions">
                 <button type="button" className="ghost-button" onClick={() => setCreating(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="primary-button" disabled={saving}>
+                <button type="submit" className="primary-button" disabled={saving || !canManageGoals}>
                   {saving ? "Saving…" : "Create"}
                 </button>
               </div>
@@ -620,45 +651,55 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets }) {
         <div className="modal-backdrop">
           <div className="modal keypad-modal">
             <h3>Log contribution</h3>
-            <label>
-              Choose goal
-              <select value={selectedGoalId} onChange={(event) => setSelectedGoalId(event.target.value)}>
-                {goals.map((goal) => (
-                  <option key={goal.id} value={goal.id}>
-                    {goal.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="keypad-display">{keypadValue || "0"}</div>
-            <div className="numeric-keypad">
-              {keypadButtons.map((row, rowIndex) => (
-                <div key={rowIndex} className="keypad-row">
-                  {row.map((label) => (
-                    <button key={label} type="button" onClick={() => appendKeypadValue(label)}>
-                      {label}
-                    </button>
+            {!canManageGoals && (
+              <p className="plan-teaser">Upgrade or start a trial to log automatic goal contributions.</p>
+            )}
+            <fieldset disabled={!canManageGoals}>
+              <label>
+                Choose goal
+                <select value={selectedGoalId} onChange={(event) => setSelectedGoalId(event.target.value)}>
+                  {goals.map((goal) => (
+                    <option key={goal.id} value={goal.id}>
+                      {goal.name}
+                    </option>
                   ))}
-                </div>
-              ))}
-            </div>
-            <label>
-              Note (optional)
-              <input
-                type="text"
-                value={contributionNote}
-                onChange={(event) => setContributionNote(event.target.value)}
-                placeholder="Paycheck transfer"
-              />
-            </label>
-            <div className="modal-actions">
-              <button type="button" className="ghost-button" onClick={closeKeypad}>
-                Cancel
-              </button>
-              <button type="button" className="primary-button" onClick={handleContributionSubmit} disabled={loggingContribution}>
-                {loggingContribution ? "Saving…" : "Log"}
-              </button>
-            </div>
+                </select>
+              </label>
+              <div className="keypad-display">{keypadValue || "0"}</div>
+              <div className="numeric-keypad">
+                {keypadButtons.map((row, rowIndex) => (
+                  <div key={rowIndex} className="keypad-row">
+                    {row.map((label) => (
+                      <button key={label} type="button" onClick={() => appendKeypadValue(label)}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <label>
+                Note (optional)
+                <input
+                  type="text"
+                  value={contributionNote}
+                  onChange={(event) => setContributionNote(event.target.value)}
+                  placeholder="Paycheck transfer"
+                />
+              </label>
+              <div className="modal-actions">
+                <button type="button" className="ghost-button" onClick={closeKeypad}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={handleContributionSubmit}
+                  disabled={loggingContribution || !canManageGoals}
+                >
+                  {loggingContribution ? "Saving…" : "Log"}
+                </button>
+              </div>
+            </fieldset>
           </div>
         </div>
       )}
