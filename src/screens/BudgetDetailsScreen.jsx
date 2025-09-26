@@ -3,6 +3,7 @@
 import { useState } from "react"
 import PropTypes from "prop-types"
 import { createTransaction, updateTransaction, updateBudget } from "../lib/supabase"
+import { calculateBudgetPacing } from "../lib/pacing"
 
 export default function BudgetDetailsScreen({ budget, categories, setViewMode, setBudgets, budgets, setSelectedBudget }) {
   const [tab, setTab] = useState("expenses")
@@ -141,6 +142,8 @@ export default function BudgetDetailsScreen({ budget, categories, setViewMode, s
     .reduce((sum, t) => sum + t.budgetedAmount, 0)
 
   const balance = totalIncome - totalExpenses
+
+  const pacing = calculateBudgetPacing(budget)
 
   // Calculate category breakdown for pie chart
   const categoryBreakdown = (budget.transactions || [])
@@ -445,6 +448,43 @@ export default function BudgetDetailsScreen({ budget, categories, setViewMode, s
           </div>
         </div>
       </div>
+
+      {pacing.categories.length > 0 && (
+        <div className="category-budget-list-card">
+          <h3 className="category-budget-list-title">Category Pacing</h3>
+          <div className="category-budget-list">
+            {pacing.categories.map((cat) => {
+              const percent = cat.budgeted > 0 ? Math.min((cat.actual / cat.budgeted) * 100, 100) : cat.actual > 0 ? 100 : 0
+
+              return (
+                <div key={cat.key || cat.name} className="category-budget-list-row">
+                  <div className="category-budget-header">
+                    <div className="category-budget-name">{cat.name || "Uncategorized"}</div>
+                    <div
+                      className={`pacing-indicator pacing-${cat.status}`}
+                      title={cat.tooltip}
+                      role="status"
+                      aria-label={`${cat.name || "Uncategorized"} pacing is ${cat.label}`}
+                    >
+                      <span className="pacing-dot" aria-hidden="true" />
+                      <span className="pacing-label">{cat.label}</span>
+                    </div>
+                  </div>
+                  <div className="category-budget-amounts">
+                    ${cat.actual.toFixed(2)} / ${cat.budgeted.toFixed(2)}
+                  </div>
+                  <div className="progress-bar">
+                    <div
+                      className={`progress-fill ${cat.actual > cat.budgeted && cat.budgeted > 0 ? "over" : ""}`}
+                      style={{ width: `${percent}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Transaction Tabs and List */}
       <div className="transactions-section">
