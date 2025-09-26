@@ -1,10 +1,17 @@
 import { useState } from "react"
+import { updateBudget } from "../lib/supabase"
 
 export default function CategoriesScreen({ categories, setCategories, budgets, setViewMode }) {
   const [tab, setTab] = useState("expense")
   const [showAddModal, setShowAddModal] = useState(false)
   const [newCat, setNewCat] = useState({ name: "", icon: "💲" })
   const [editingCat, setEditingCat] = useState(null)
+  const [deleteContext, setDeleteContext] = useState(null)
+  const [reallocationSelections, setReallocationSelections] = useState({})
+  const [deleteError, setDeleteError] = useState("")
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
+  const REMOVE_OPTION = "__REMOVE__"
 
   // Curated selection of 32 most useful icons
   const iconBank = [
@@ -79,11 +86,139 @@ export default function CategoriesScreen({ categories, setCategories, budgets, s
       alert("Cannot delete category in use.")
       return
     }
+    const budgetsUsingCategory = budgets.filter((budget) =>
+      (budget.categoryBudgets || []).some((categoryBudget) => categoryBudget.category === name),
+    )
+
+    setDeleteContext({
+      category: name,
+      type: tab,
+      budgets: budgetsUsingCategory,
+      step: "confirm",
+    })
+    setReallocationSelections({})
+    setDeleteError("")
+  }
+
+  const closeDeleteModal = () => {
+    setDeleteContext(null)
+    setReallocationSelections({})
+    setDeleteError("")
+    setDeleteLoading(false)
+  }
+
+  const finalizeCategoryRemoval = () => {
+    if (!deleteContext) return
+
     const updated = {
       ...categories,
-      [tab]: categories[tab].filter((c) => c.name !== name),
+      [deleteContext.type]: categories[deleteContext.type].filter((c) => c.name !== deleteContext.category),
     }
+
     setCategories(updated)
+
+    if (editingCat?.originalName === deleteContext.category) {
+      setEditingCat(null)
+    }
+
+    closeDeleteModal()
+  }
+
+  const proceedToReallocation = () => {
+    if (!deleteContext) return
+
+    if (deleteContext.budgets.length === 0) {
+      finalizeCategoryRemoval()
+      return
+    }
+
+    const otherCategories = categories[deleteContext.type].filter(
+      (category) => category.name !== deleteContext.category,
+    )
+
+    const initialSelections = {}
+    deleteContext.budgets.forEach((budget) => {
+      initialSelections[budget.id] = otherCategories.length === 0 ? REMOVE_OPTION : ""
+    })
+
+    setReallocationSelections(initialSelections)
+    setDeleteError("")
+    setDeleteContext((prev) => (prev ? { ...prev, step: "reallocate" } : prev))
+  }
+
+  const handleReallocationChange = (budgetId, value) => {
+    setDeleteError("")
+    setReallocationSelections((prev) => ({
+      ...prev,
+      [budgetId]: value,
+    }))
+  }
+
+  const submitReallocation = async () => {
+    if (!deleteContext) return
+
+    const otherCategories = categories[deleteContext.type].filter(
+      (category) => category.name !== deleteContext.category,
+    )
+
+    const needsSelection = deleteContext.budgets.some(
+      (budget) => !reallocationSelections[budget.id] && otherCategories.length > 0,
+    )
+
+    if (needsSelection) {
+      setDeleteError("Please select a destination for each allocation or choose to remove it.")
+      return
+    }
+
+    setDeleteLoading(true)
+    setDeleteError("")
+
+    try {
+      await Promise.all(
+        deleteContext.budgets.map(async (budget) => {
+          const allocation = (budget.categoryBudgets || []).find(
+            (categoryBudget) => categoryBudget.category === deleteContext.category,
+          )
+
+          if (!allocation) return
+
+          const amount = Number.parseFloat(allocation.budgetedAmount) || 0
+
+          const updatedAllocations = (budget.categoryBudgets || [])
+            .filter((categoryBudget) => categoryBudget.category !== deleteContext.category)
+            .map((categoryBudget) => ({ ...categoryBudget }))
+
+          const selection =
+            reallocationSelections[budget.id] || (otherCategories.length === 0 ? REMOVE_OPTION : "")
+
+          if (selection && selection !== REMOVE_OPTION && amount > 0) {
+            const existingTarget = updatedAllocations.find((entry) => entry.category === selection)
+            if (existingTarget) {
+              const currentAmount = Number.parseFloat(existingTarget.budgetedAmount) || 0
+              existingTarget.budgetedAmount = currentAmount + amount
+            } else {
+              updatedAllocations.push({ category: selection, budgetedAmount: amount })
+            }
+          }
+
+          const { error } = await updateBudget(budget.id, {
+            name: budget.name,
+            categoryBudgets: updatedAllocations,
+          })
+
+          if (error) {
+            throw error
+          }
+        }),
+      )
+
+      finalizeCategoryRemoval()
+    } catch (error) {
+      console.error("Error updating budget allocations:", error)
+      setDeleteError("Failed to update budget allocations. Please try again.")
+    } finally {
+      setDeleteLoading(false)
+    }
   }
 
   return (
@@ -189,6 +324,107 @@ export default function CategoriesScreen({ categories, setCategories, budgets, s
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {deleteContext && (
+        <div className="modalBackdrop">
+          <div className="modalContent">
+            {deleteContext.step === "confirm" ? (
+              <>
+                <h2 className="header modal-header">Delete Category</h2>
+                <p>
+                  Are you sure you want to delete the <strong>{deleteContext.category}</strong> {deleteContext.type}
+                  {" "}
+                  category?
+                </p>
+                {deleteContext.budgets.length > 0 && (
+                  <p>
+                    This category has allocations in {deleteContext.budgets.length} budget
+                    {deleteContext.budgets.length > 1 ? "s" : ""}. You'll need to reallocate them before
+                    continuing.
+                  </p>
+                )}
+                <div className="modal-actions">
+                  <button className="cancelButton secondary-button" onClick={closeDeleteModal}>
+                    Cancel
+                  </button>
+                  <button className="addButton primary-button" onClick={proceedToReallocation}>
+                    {deleteContext.budgets.length > 0 ? "Continue" : "Delete"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="header modal-header">Reallocate Budget</h2>
+                <p>
+                  Move the remaining budget from <strong>{deleteContext.category}</strong> before deleting it.
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem" }}>
+                  {deleteContext.budgets.map((budget) => {
+                    const allocation = (budget.categoryBudgets || []).find(
+                      (categoryBudget) => categoryBudget.category === deleteContext.category,
+                    )
+                    const amount = Number.parseFloat(allocation?.budgetedAmount) || 0
+                    const availableCategories = categories[deleteContext.type].filter(
+                      (category) => category.name !== deleteContext.category,
+                    )
+
+                    return (
+                      <div
+                        key={budget.id}
+                        style={{
+                          border: "1px solid #e5e7eb",
+                          borderRadius: "12px",
+                          padding: "0.75rem 1rem",
+                          background: "#f9fafb",
+                        }}
+                      >
+                        <div style={{ fontWeight: 600 }}>{budget.name}</div>
+                        <div style={{ margin: "0.25rem 0 0.75rem", color: "#4b5563" }}>
+                          ${amount.toFixed(2)} allocated to {deleteContext.category}
+                        </div>
+                        {availableCategories.length === 0 ? (
+                          <div style={{ color: "#6b7280" }}>
+                            No other categories available. This allocation will be removed.
+                          </div>
+                        ) : (
+                          <select
+                            className="input"
+                            value={reallocationSelections[budget.id] ?? ""}
+                            onChange={(e) => handleReallocationChange(budget.id, e.target.value)}
+                          >
+                            <option value="" disabled>
+                              Select a new category
+                            </option>
+                            {availableCategories.map((option) => (
+                              <option key={option.name} value={option.name}>
+                                {option.icon} {option.name}
+                              </option>
+                            ))}
+                            <option value={REMOVE_OPTION}>Remove allocation</option>
+                          </select>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                {deleteError && <div className="error-message">{deleteError}</div>}
+                <div className="modal-actions">
+                  <button
+                    className="cancelButton secondary-button"
+                    onClick={() => setDeleteContext((prev) => (prev ? { ...prev, step: "confirm" } : prev))}
+                    disabled={deleteLoading}
+                  >
+                    Back
+                  </button>
+                  <button className="addButton primary-button" onClick={submitReallocation} disabled={deleteLoading}>
+                    {deleteLoading ? "Saving..." : "Save & Delete"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
