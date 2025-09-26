@@ -11,6 +11,23 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
+  const handleDemoLogin = async () => {
+    setLoading(true)
+    setError("")
+
+    try {
+      const { error: demoError } = await signIn("test@me.com", "pass123")
+      if (demoError) {
+        setError(demoError.message || "Unable to start demo session")
+      }
+    } catch (demoUnexpected) {
+      console.error("Demo login error:", demoUnexpected)
+      setError("Demo login failed. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleEmailAuth = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -83,7 +100,6 @@ export default function LoginScreen() {
         <div className="login-form-container">
           {error && <div className="error-message">{error}</div>}
 
-          {/* Demo Login Button
           <button
             onClick={handleDemoLogin}
             className="google-button"
@@ -97,7 +113,6 @@ export default function LoginScreen() {
           >
             🎯 Demo Login (test@me.com)
           </button>
-           */}
 
           <form onSubmit={handleEmailAuth} className="login-form">
             <input
