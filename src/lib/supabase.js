@@ -179,6 +179,71 @@ let demoCategories = {
   ],
 }
 
+let demoAIDismissals = []
+
+export const getAIInsightDismissals = async (userId, cycleId) => {
+  if (!userId || !cycleId) {
+    return { data: [], error: null }
+  }
+
+  if (userId === DEMO_ADMIN.user.id) {
+    const data = demoAIDismissals.filter((item) => item.user_id === userId && item.cycle_id === cycleId)
+    return { data, error: null }
+  }
+
+  const { data, error } = await supabase
+    .from("ai_insight_dismissals")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("cycle_id", cycleId)
+
+  return { data, error }
+}
+
+export const dismissAIInsight = async (userId, cycleId, insightId, insightType) => {
+  if (!userId || !cycleId || !insightId) {
+    return { data: null, error: new Error("Missing dismissal parameters") }
+  }
+
+  if (userId === DEMO_ADMIN.user.id) {
+    const exists = demoAIDismissals.some(
+      (item) =>
+        item.user_id === userId &&
+        item.cycle_id === cycleId &&
+        item.insight_id === insightId &&
+        item.insight_type === insightType,
+    )
+
+    if (!exists) {
+      demoAIDismissals.push({
+        user_id: userId,
+        cycle_id: cycleId,
+        insight_id: insightId,
+        insight_type: insightType,
+        dismissed_at: new Date().toISOString(),
+      })
+    }
+
+    return { data: null, error: null }
+  }
+
+  const { data, error } = await supabase
+    .from("ai_insight_dismissals")
+    .upsert(
+      {
+        user_id: userId,
+        cycle_id: cycleId,
+        insight_id: insightId,
+        insight_type: insightType,
+        dismissed_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,cycle_id,insight_id" },
+    )
+    .select()
+
+  return { data, error }
+}
+
 export const getBudgets = async (userId) => {
   // For demo admin, return in-memory data
   if (userId === DEMO_ADMIN.user.id) {
