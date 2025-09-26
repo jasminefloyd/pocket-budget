@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
 import { getBudgets, getUserCategories, updateUserCategories } from "./lib/supabase"
 import BudgetsScreen from "./screens/BudgetsScreen"
@@ -12,43 +12,66 @@ import LoadingScreen from "./components/LoadingScreen"
 import Header from "./components/Header"
 import InstallPrompt from "./components/InstallPrompt"
 
+const BASE_CATEGORIES = {
+  income: [
+    { name: "Salary", icon: "💼" },
+    { name: "Freelance", icon: "💻" },
+    { name: "Investment", icon: "📈" },
+    { name: "Business", icon: "🏢" },
+    { name: "Gift", icon: "🎁" },
+  ],
+  expense: [
+    { name: "Groceries", icon: "🛒" },
+    { name: "Rent", icon: "🏠" },
+    { name: "Transportation", icon: "🚗" },
+    { name: "Entertainment", icon: "🎮" },
+    { name: "Bills", icon: "🧾" },
+    { name: "Shopping", icon: "🛍️" },
+  ],
+}
+
+const createDefaultCategories = () => ({
+  income: BASE_CATEGORIES.income.map((category) => ({ ...category })),
+  expense: BASE_CATEGORIES.expense.map((category) => ({ ...category })),
+})
+
 function AppContent() {
   const { user, loading: authLoading, initializing } = useAuth()
   const [budgets, setBudgets] = useState([])
-  const [categories, setCategories] = useState({
-    income: [
-      { name: "Salary", icon: "💼" },
-      { name: "Freelance", icon: "💻" },
-      { name: "Investment", icon: "📈" },
-      { name: "Business", icon: "🏢" },
-      { name: "Gift", icon: "🎁" },
-    ],
-    expense: [
-      { name: "Groceries", icon: "🛒" },
-      { name: "Rent", icon: "🏠" },
-      { name: "Transportation", icon: "🚗" },
-      { name: "Entertainment", icon: "🎮" },
-      { name: "Bills", icon: "🧾" },
-      { name: "Shopping", icon: "🛍️" },
-    ],
-  })
+  const [categories, setCategories] = useState(createDefaultCategories)
   const [selectedBudget, setSelectedBudget] = useState(null)
   const [viewMode, setViewMode] = useState("budgets")
   const [isLoading, setIsLoading] = useState(false)
 
-  const loadUserData = useCallback(async () => {
+  useEffect(() => {
     if (!user) {
-      return
+      setBudgets([])
+      setCategories(createDefaultCategories())
+      setIsLoading(false)
     }
-    try {
-      setIsLoading(true)
+  }, [user])
 
-      // Load budgets
-      const { data: budgetsData, error: budgetsError } = await getBudgets(user.id)
-      if (budgetsError) {
-        console.error("Error loading budgets:", budgetsError)
-      } else {
-        // Transform the data to match the existing structure
+  // Load user data when authenticated
+  useEffect(() => {
+    if (!user || authLoading || initializing) {
+      return undefined
+    }
+
+    let isActive = true
+    setIsLoading(true)
+
+    const budgetsPromise = getBudgets(user.id)
+    const categoriesPromise = getUserCategories(user.id)
+
+    budgetsPromise
+      .then(({ data: budgetsData, error: budgetsError }) => {
+        if (!isActive) return
+
+        if (budgetsError) {
+          console.error("Error loading budgets:", budgetsError)
+          return
+        }
+
         const transformedBudgets =
           budgetsData?.map((budget) => ({
             id: budget.id,
@@ -69,28 +92,39 @@ function AppContent() {
           })) || []
 
         setBudgets(transformedBudgets)
-      }
+      })
+      .catch((error) => {
+        if (!isActive) return
+        console.error("Error loading budgets:", error)
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoading(false)
+        }
+      })
 
-      // Load user categories
-      const { data: categoriesData, error: categoriesError } = await getUserCategories(user.id)
-      if (categoriesError && categoriesError.code !== "PGRST116") {
-        console.error("Error loading categories:", categoriesError)
-      } else if (categoriesData?.categories) {
-        setCategories(categoriesData.categories)
-      }
-    } catch (error) {
-      console.error("Error loading user data:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [user])
+    categoriesPromise
+      .then(({ data: categoriesData, error: categoriesError }) => {
+        if (!isActive) return
 
-  // Load user data when authenticated
-  useEffect(() => {
-    if (user && !authLoading && !initializing) {
-      loadUserData()
+        if (categoriesError && categoriesError.code !== "PGRST116") {
+          console.error("Error loading categories:", categoriesError)
+          return
+        }
+
+        if (categoriesData?.categories) {
+          setCategories(categoriesData.categories)
+        }
+      })
+      .catch((error) => {
+        if (!isActive) return
+        console.error("Error loading categories:", error)
+      })
+
+    return () => {
+      isActive = false
     }
-  }, [user, authLoading, initializing, loadUserData])
+  }, [user, authLoading, initializing])
 
   const handleCategoriesUpdate = async (newCategories) => {
     setCategories(newCategories)
