@@ -1,7 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { createTransaction, updateTransaction, updateBudget } from "../lib/supabase"
+import {
+  buildDefaultCategoryBudgets,
+  createClientId,
+  ensureCategoryBudgetShape,
+  haveCategoryBudgetsChanged,
+  normalizeAmount,
+} from "../utils/budgetAllocations"
 
 export default function BudgetDetailsScreen({
   budget,
@@ -29,8 +36,327 @@ export default function BudgetDetailsScreen({
   })
 
   const [selectedSlice, setSelectedSlice] = useState(null)
+  const [categoryBudgetsState, setCategoryBudgetsState] = useState(() => {
+    if (budget.categoryBudgets && budget.categoryBudgets.length > 0) {
+      return ensureCategoryBudgetShape(budget.categoryBudgets)
+    }
+    return buildDefaultCategoryBudgets(categories?.expense || [])
+  })
+  const [changeHistory, setChangeHistory] = useState([])
+  const [showChangeLog, setShowChangeLog] = useState(false)
+  const [snackbar, setSnackbar] = useState({ open: false, message: "", actionLabel: "", onAction: null })
+  const snackbarTimeoutRef = useRef(null)
+  const lastPersistedBudgetsRef = useRef(ensureCategoryBudgetShape(categoryBudgetsState))
+  const [allocationSaving, setAllocationSaving] = useState(false)
 
   const ITEMS_PER_PAGE = 7
+
+  useEffect(() => {
+    const initialBudgets =
+      budget.categoryBudgets && budget.categoryBudgets.length > 0
+        ? ensureCategoryBudgetShape(budget.categoryBudgets)
+        : buildDefaultCategoryBudgets(categories?.expense || [])
+
+    setCategoryBudgetsState(initialBudgets)
+    lastPersistedBudgetsRef.current = initialBudgets.map((item) => ({ ...item }))
+    setChangeHistory([])
+    setShowChangeLog(false)
+  }, [budget.id])
+
+  useEffect(() => {
+    if (!budget.categoryBudgets || budget.categoryBudgets.length === 0) {
+      return
+    }
+
+    const normalized = ensureCategoryBudgetShape(budget.categoryBudgets)
+    if (!haveCategoryBudgetsChanged(normalized, lastPersistedBudgetsRef.current)) {
+      return
+    }
+
+    setCategoryBudgetsState(normalized)
+    lastPersistedBudgetsRef.current = normalized.map((item) => ({ ...item }))
+  }, [budget.categoryBudgets])
+
+  useEffect(() => {
+    return () => {
+      if (snackbarTimeoutRef.current) {
+        clearTimeout(snackbarTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  const syncBudgetState = (nextCategoryBudgets) => {
+    const updatedBudget = { ...budget, categoryBudgets: nextCategoryBudgets }
+    const updatedBudgets = budgets.map((b) => (b.id === budget.id ? updatedBudget : b))
+    setBudgets(updatedBudgets)
+    const refreshed = updatedBudgets.find((b) => b.id === budget.id) || updatedBudget
+    setSelectedBudget(refreshed)
+  }
+
+  const hideSnackbar = () => {
+    if (snackbarTimeoutRef.current) {
+      clearTimeout(snackbarTimeoutRef.current)
+      snackbarTimeoutRef.current = null
+    }
+    setSnackbar({ open: false, message: "", actionLabel: "", onAction: null })
+  }
+
+  const showSnackbar = (message, actionHandler = null) => {
+    hideSnackbar()
+    setSnackbar({
+      open: true,
+      message,
+      actionLabel: actionHandler ? "Undo" : "",
+      onAction: actionHandler,
+    })
+    snackbarTimeoutRef.current = setTimeout(() => {
+      setSnackbar({ open: false, message: "", actionLabel: "", onAction: null })
+      snackbarTimeoutRef.current = null
+    }, 4000)
+  }
+
+  const persistCategoryBudgets = async (
+    nextBudgets,
+    description,
+    previousBudgets = lastPersistedBudgetsRef.current,
+    { touchedIds = [], skipHistory = false, skipSnackbar = false, suppressUndo = false } = {},
+  ) => {
+    const normalizedPrev = ensureCategoryBudgetShape(previousBudgets).map((item) => ({ ...item }))
+    const timestamp = new Date().toISOString()
+
+    const normalizedNext = ensureCategoryBudgetShape(
+      nextBudgets.map((item) => {
+        const previousMatch = normalizedPrev.find((prevItem) => prevItem.id === item.id)
+        const touched = touchedIds.includes(item.id)
+        return {
+          ...item,
+          lastUpdated: touched
+            ? timestamp
+            : item.lastUpdated || previousMatch?.lastUpdated || timestamp,
+        }
+      }),
+    )
+
+    if (!haveCategoryBudgetsChanged(normalizedNext, normalizedPrev)) {
+      setCategoryBudgetsState(normalizedNext)
+      return
+    }
+
+    let historyEntry = null
+    if (!skipHistory && description) {
+      historyEntry = {
+        id: createClientId("log"),
+        timestamp,
+        description,
+        previous: normalizedPrev.map((item) => ({ ...item })),
+        next: normalizedNext.map((item) => ({ ...item })),
+      }
+      setChangeHistory((prevHistory) => [historyEntry, ...prevHistory])
+    }
+
+    setCategoryBudgetsState(normalizedNext)
+    syncBudgetState(normalizedNext)
+    lastPersistedBudgetsRef.current = normalizedNext.map((item) => ({ ...item }))
+
+    setAllocationSaving(true)
+    try {
+      await updateBudget(budget.id, {
+        name: budget.name,
+        categoryBudgets: normalizedNext,
+      })
+
+      if (!skipSnackbar && description) {
+        if (historyEntry && !suppressUndo) {
+          showSnackbar(description, () => handleUndo(historyEntry))
+        } else {
+          showSnackbar(description, null)
+        }
+      }
+    } catch (error) {
+      console.error("Error updating category budgets:", error)
+      alert("Failed to update allocations. Changes were reverted.")
+      setCategoryBudgetsState(normalizedPrev)
+      syncBudgetState(normalizedPrev)
+      lastPersistedBudgetsRef.current = normalizedPrev.map((item) => ({ ...item }))
+      if (historyEntry) {
+        setChangeHistory((prevHistory) => prevHistory.filter((entry) => entry.id !== historyEntry.id))
+      }
+    } finally {
+      setAllocationSaving(false)
+    }
+  }
+
+  const handleUndo = (entry) => {
+    hideSnackbar()
+    persistCategoryBudgets(entry.previous, `Reverted: ${entry.description}`, entry.next, {
+      touchedIds: entry.previous.map((item) => item.id),
+      suppressUndo: true,
+    })
+  }
+
+  const handleCategoryNameChange = (id, value) => {
+    setCategoryBudgetsState((prev) => prev.map((item) => (item.id === id ? { ...item, category: value } : item)))
+  }
+
+  const commitCategoryNameChange = (id) => {
+    const previous = lastPersistedBudgetsRef.current
+    const current = categoryBudgetsState
+    const nextEntry = current.find((item) => item.id === id)
+    if (!nextEntry) return
+    const trimmed = (nextEntry.category || "").trim()
+    const prevEntry = previous.find((item) => item.id === id)
+    const prevTrimmed = (prevEntry?.category || "").trim()
+
+    if (trimmed === prevTrimmed) {
+      if (nextEntry.category !== trimmed) {
+        setCategoryBudgetsState((state) =>
+          state.map((item) => (item.id === id ? { ...item, category: trimmed } : item)),
+        )
+      }
+      return
+    }
+
+    const description = prevTrimmed
+      ? trimmed
+        ? `Renamed ${prevTrimmed} to ${trimmed}`
+        : `Cleared name for ${prevTrimmed}`
+      : trimmed
+      ? `Named allocation ${trimmed}`
+      : "Updated allocation name"
+
+    const timestamped = current.map((item) =>
+      item.id === id ? { ...item, category: trimmed, lastUpdated: new Date().toISOString() } : item,
+    )
+
+    persistCategoryBudgets(timestamped, description, previous, {
+      touchedIds: [id],
+    })
+  }
+
+  const handleCategoryAmountChange = (id, value) => {
+    setCategoryBudgetsState((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item
+        if (value === "") {
+          return { ...item, budgetedAmount: "" }
+        }
+        const numeric = Number.parseFloat(value)
+        if (Number.isNaN(numeric)) {
+          return item
+        }
+        return { ...item, budgetedAmount: numeric }
+      }),
+    )
+  }
+
+  const commitCategoryAmountChange = (id) => {
+    const previous = lastPersistedBudgetsRef.current
+    const current = categoryBudgetsState
+    const nextEntry = current.find((item) => item.id === id)
+    if (!nextEntry) return
+
+    const prevEntry = previous.find((item) => item.id === id)
+    const prevAmount = normalizeAmount(prevEntry?.budgetedAmount ?? 0)
+    const nextAmount = normalizeAmount(nextEntry.budgetedAmount)
+
+    if (prevAmount === nextAmount) {
+      if (nextEntry.budgetedAmount !== nextAmount) {
+        setCategoryBudgetsState((state) =>
+          state.map((item) => (item.id === id ? { ...item, budgetedAmount: nextAmount } : item)),
+        )
+      }
+      return
+    }
+
+    const label = (nextEntry.category || prevEntry?.category || "Allocation").trim() || "Allocation"
+    const description = `Updated ${label} allocation to $${nextAmount.toFixed(2)}`
+
+    const timestamp = new Date().toISOString()
+    const timestamped = current.map((item) =>
+      item.id === id ? { ...item, budgetedAmount: nextAmount, lastUpdated: timestamp } : item,
+    )
+
+    persistCategoryBudgets(timestamped, description, previous, {
+      touchedIds: [id],
+    })
+  }
+
+  const handleAddCategory = () => {
+    const timestamp = new Date().toISOString()
+    const newCategory = {
+      id: createClientId("alloc"),
+      category: "",
+      budgetedAmount: 0,
+      lastUpdated: timestamp,
+    }
+
+    const next = [...categoryBudgetsState, newCategory]
+    persistCategoryBudgets(next, "Added a new allocation", lastPersistedBudgetsRef.current, {
+      touchedIds: [newCategory.id],
+    })
+  }
+
+  const handleRemoveCategory = (id) => {
+    const previous = lastPersistedBudgetsRef.current
+    const target = categoryBudgetsState.find((item) => item.id === id)
+    const remaining = categoryBudgetsState.filter((item) => item.id !== id)
+
+    const description = target?.category
+      ? `Removed ${target.category.trim() || "an allocation"}`
+      : "Removed an allocation"
+
+    persistCategoryBudgets(remaining, description, previous, {
+      touchedIds: [],
+    })
+  }
+
+  const formatTimestamp = (value) => {
+    if (!value) {
+      return "Not updated yet"
+    }
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+      return "Not updated yet"
+    }
+    return `Updated ${date.toLocaleString()}`
+  }
+
+  const describeChangeDetails = (entry) => {
+    const details = []
+    const prevMap = new Map(entry.previous.map((item) => [item.id, item]))
+    const nextMap = new Map(entry.next.map((item) => [item.id, item]))
+
+    entry.next.forEach((item) => {
+      const prev = prevMap.get(item.id)
+      const nextName = (item.category || "").trim()
+      if (!prev) {
+        details.push(`${nextName || "New allocation"} added with $${normalizeAmount(item.budgetedAmount).toFixed(2)}`)
+        return
+      }
+
+      const prevName = (prev.category || "").trim()
+      if (prevName !== nextName) {
+        details.push(`${prevName || "Allocation"} renamed to ${nextName || "Untitled"}`)
+      }
+
+      if (normalizeAmount(prev.budgetedAmount) !== normalizeAmount(item.budgetedAmount)) {
+        details.push(
+          `${nextName || prevName || "Allocation"}: $${normalizeAmount(prev.budgetedAmount).toFixed(2)} → $${normalizeAmount(
+            item.budgetedAmount,
+          ).toFixed(2)}`,
+        )
+      }
+    })
+
+    entry.previous.forEach((item) => {
+      if (!nextMap.has(item.id)) {
+        const prevName = (item.category || "Allocation").trim() || "Allocation"
+        details.push(`${prevName} removed`)
+      }
+    })
+
+    return details
+  }
 
   const resolveTypeKey = (typeOrTab) => {
     if (typeOrTab === "income" || typeOrTab === "expense") return typeOrTab
@@ -121,7 +447,7 @@ export default function BudgetDetailsScreen({
     try {
       const { error } = await updateBudget(budget.id, {
         name: newName,
-        categoryBudgets: budget.categoryBudgets,
+        categoryBudgets: ensureCategoryBudgetShape(budget.categoryBudgets),
       })
 
       if (error) {
@@ -311,6 +637,110 @@ export default function BudgetDetailsScreen({
         onChange={(e) => handleBudgetNameChange(e.target.value)}
         placeholder="Budget Name"
       />
+
+      <section className="allocation-editor">
+        <div className="allocation-header">
+          <h3 className="allocation-title">Allocation Plan</h3>
+          <div className="allocation-header-actions">
+            {allocationSaving && <span className="allocation-status">Saving...</span>}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => setShowChangeLog((prev) => !prev)}
+            >
+              {showChangeLog ? "Hide Change Log" : "Change Log"}
+            </button>
+          </div>
+        </div>
+        <p className="allocation-subtitle">
+          Plan how much you want to spend in each category. Updates save automatically and power your insights.
+        </p>
+        <div className="allocation-list">
+          {categoryBudgetsState.length === 0 ? (
+            <div className="allocation-empty">No allocations yet. Add one to get started.</div>
+          ) : (
+            categoryBudgetsState.map((row) => {
+              const amountValue =
+                row.budgetedAmount === "" || row.budgetedAmount === null || row.budgetedAmount === undefined
+                  ? ""
+                  : row.budgetedAmount
+
+              return (
+                <div key={row.id} className="allocation-row">
+                  <div className="allocation-row-main">
+                    <input
+                      className="input allocation-input"
+                      value={row.category}
+                      onChange={(e) => handleCategoryNameChange(row.id, e.target.value)}
+                      onBlur={() => commitCategoryNameChange(row.id)}
+                      placeholder="Category name"
+                    />
+                    <div className="allocation-amount-wrapper">
+                      <span className="allocation-currency">$</span>
+                      <input
+                        className="input allocation-amount-input"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={amountValue}
+                        onChange={(e) => handleCategoryAmountChange(row.id, e.target.value)}
+                        onBlur={() => commitCategoryAmountChange(row.id)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      onClick={() => handleRemoveCategory(row.id)}
+                      title="Remove allocation"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="allocation-row-meta">{formatTimestamp(row.lastUpdated)}</div>
+                </div>
+              )
+            })
+          )}
+        </div>
+        <button
+          type="button"
+          className="secondary-button allocation-add-button"
+          onClick={handleAddCategory}
+          disabled={allocationSaving}
+        >
+          + Add Category
+        </button>
+
+        {showChangeLog && (
+          <div className="change-log">
+            <h4>Change Log</h4>
+            {changeHistory.length === 0 ? (
+              <p className="change-log-empty">No allocation changes yet.</p>
+            ) : (
+              <ul className="change-log-list">
+                {changeHistory.slice(0, 10).map((entry) => {
+                  const details = describeChangeDetails(entry)
+                  return (
+                    <li key={entry.id} className="change-log-item">
+                      <div className="change-log-item-header">
+                        <span className="change-log-description">{entry.description}</span>
+                        <span className="change-log-timestamp">{new Date(entry.timestamp).toLocaleString()}</span>
+                      </div>
+                      {details.length > 0 && (
+                        <ul className="change-log-details">
+                          {details.map((detail, index) => (
+                            <li key={index}>{detail}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* Budget Overview Section */}
       <div className="budget-overview-card">
@@ -626,6 +1056,23 @@ export default function BudgetDetailsScreen({
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {snackbar.open && (
+        <div className="snackbar">
+          <span className="snackbar-message">{snackbar.message}</span>
+          {snackbar.actionLabel && (
+            <button
+              type="button"
+              className="snackbar-action"
+              onClick={() => {
+                hideSnackbar()
+                snackbar.onAction?.()
+              }}
+            >
+              {snackbar.actionLabel}
+            </button>
+          )}
         </div>
       )}
     </div>

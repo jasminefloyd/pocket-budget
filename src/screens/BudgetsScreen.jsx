@@ -2,8 +2,16 @@
 
 import { useState } from "react"
 import { createBudget, updateBudget, deleteBudget } from "../lib/supabase"
+import { buildDefaultCategoryBudgets, ensureCategoryBudgetShape } from "../utils/budgetAllocations"
 
-export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode, setBudgets, userId }) {
+export default function BudgetsScreen({
+  budgets,
+  setSelectedBudget,
+  setViewMode,
+  setBudgets,
+  userId,
+  categories,
+}) {
   const [editingBudgetId, setEditingBudgetId] = useState(null)
   const [budgetNameInput, setBudgetNameInput] = useState("")
   const [openMenuId, setOpenMenuId] = useState(null)
@@ -17,9 +25,11 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
   const createNewBudget = async () => {
     setLoading(true)
     try {
+      const defaultCategoryBudgets = buildDefaultCategoryBudgets(categories?.expense || [])
+
       const newBudgetData = {
         name: `My Budget`,
-        categoryBudgets: [],
+        categoryBudgets: defaultCategoryBudgets,
       }
 
       const { data, error } = await createBudget(userId, newBudgetData)
@@ -31,7 +41,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
           id: data[0].id,
           name: data[0].name,
           createdAt: new Date(data[0].created_at).toLocaleDateString(),
-          categoryBudgets: data[0].category_budgets || [],
+          categoryBudgets: ensureCategoryBudgetShape(data[0].category_budgets || defaultCategoryBudgets),
           transactions: [],
         }
         setBudgets([newBudget, ...budgets])
@@ -54,7 +64,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
     try {
       const { error } = await updateBudget(budget.id, {
         name: budgetNameInput.trim(),
-        categoryBudgets: budget.categoryBudgets,
+        categoryBudgets: ensureCategoryBudgetShape(budget.categoryBudgets),
       })
 
       if (error) {
@@ -78,7 +88,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
     try {
       const duplicateData = {
         name: `${budget.name} (Copy)`,
-        categoryBudgets: budget.categoryBudgets || [],
+        categoryBudgets: ensureCategoryBudgetShape(budget.categoryBudgets || []),
       }
 
       const { data, error } = await createBudget(userId, duplicateData)
@@ -90,7 +100,7 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
           id: data[0].id,
           name: data[0].name,
           createdAt: new Date(data[0].created_at).toLocaleDateString(),
-          categoryBudgets: data[0].category_budgets || [],
+          categoryBudgets: ensureCategoryBudgetShape(data[0].category_budgets || duplicateData.categoryBudgets),
           transactions: [],
         }
         setBudgets([newBudget, ...budgets])
@@ -150,14 +160,15 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
 
           // Category budget summaries
           const categorySummaries = (budget.categoryBudgets || []).map((cat) => {
+            const planned = Number(cat.budgetedAmount || 0)
             const actual = (budget.transactions || [])
               .filter(
                 (t) => t.type === "expense" && t.category.toLowerCase().trim() === cat.category.toLowerCase().trim(),
               )
               .reduce((sum, t) => sum + t.amount, 0)
 
-            const isOver = actual > cat.budgetedAmount
-            return { ...cat, actual, isOver }
+            const isOver = actual > planned
+            return { ...cat, budgetedAmount: planned, actual, isOver }
           })
 
           const isAnyCategoryOver = categorySummaries.some((cat) => cat.isOver)

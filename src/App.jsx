@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
 import { getBudgets, getUserCategories, updateUserCategories } from "./lib/supabase"
+import { ensureCategoryBudgetShape } from "./utils/budgetAllocations"
 import BudgetsScreen from "./screens/BudgetsScreen"
 import BudgetDetailsScreen from "./screens/BudgetDetailsScreen"
 import CategoriesScreen from "./screens/CategoriesScreen"
@@ -58,7 +59,7 @@ function AppContent() {
             id: budget.id,
             name: budget.name,
             createdAt: new Date(budget.created_at).toLocaleDateString(),
-            categoryBudgets: budget.category_budgets || [],
+            categoryBudgets: ensureCategoryBudgetShape(budget.category_budgets || []),
             transactions:
               budget.transactions?.map((tx) => ({
                 id: tx.id,
@@ -137,6 +138,7 @@ function AppContent() {
           setViewMode={setViewMode}
           setBudgets={setBudgets}
           userId={user.id}
+          categories={categories}
         />
       )}
       {viewMode === "details" && selectedBudget && (
