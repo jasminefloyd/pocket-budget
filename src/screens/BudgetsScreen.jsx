@@ -426,43 +426,53 @@ export default function BudgetsScreen({
 
                   {categorySummaries.length > 0 && (
                     <div className="category-budgets">
-                      {categorySummaries.slice(0, 3).map((cat) => (
-                        <div key={cat.category} className="category-budget-row">
-                          <div className="category-budget-header">
-                            <div className="category-budget-name">
-                              {cat.category}
-                              {cat.isOver && (
-                                <span className="expense" style={{ marginLeft: "0.3rem" }}>
-                                  ⚠
-                                </span>
+                      {categorySummaries.slice(0, 3).map((cat) => {
+                        const hasBudget = !!cat.budgetedAmount && cat.budgetedAmount > 0
+                        const progressPercent = hasBudget
+                          ? Math.min((cat.actual / cat.budgetedAmount) * 100, 100)
+                          : 0
+
+                        return (
+                          <div key={cat.category} className="category-budget-row">
+                            <div className="category-budget-header">
+                              <div className="category-budget-name">
+                                {cat.category}
+                                {cat.isOver && (
+                                  <span className="expense" style={{ marginLeft: "0.3rem" }}>
+                                    ⚠
+                                  </span>
+                                )}
+                              </div>
+                              {cat.pacing && (
+                                <div
+                                  className={`pacing-indicator pacing-${cat.pacing.status}`}
+                                  title={cat.pacing.tooltip}
+                                  role="status"
+                                  aria-label={`${cat.category} pacing is ${cat.pacing.label}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <span className="pacing-dot" aria-hidden="true" />
+                                  <span className="pacing-label">{cat.pacing.label}</span>
+                                </div>
                               )}
                             </div>
-                            {cat.pacing && (
+                            <div className="category-budget-amounts">
+                              ${cat.actual.toFixed(2)} / ${cat.budgetedAmount.toFixed(2)}
+                            </div>
+                            <div className="progress-bar">
                               <div
-                                className={`pacing-indicator pacing-${cat.pacing.status}`}
-                                title={cat.pacing.tooltip}
-                                role="status"
-                                aria-label={`${cat.category} pacing is ${cat.pacing.label}`}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <span className="pacing-dot" aria-hidden="true" />
-                                <span className="pacing-label">{cat.pacing.label}</span>
-                              </div>
-                            )}
+                                className={`progress-fill ${cat.isOver ? "over" : ""}`}
+                                style={{
+                                  width: `${progressPercent}%`,
+                                }}
+                                aria-label={
+                                  hasBudget ? undefined : `${cat.category} has no budget set`
+                                }
+                              ></div>
+                            </div>
                           </div>
-                          <div className="category-budget-amounts">
-                            ${cat.actual.toFixed(2)} / ${cat.budgetedAmount.toFixed(2)}
-                          </div>
-                          <div className="progress-bar">
-                            <div
-                              className={`progress-fill ${cat.isOver ? "over" : ""}`}
-                              style={{
-                                width: `${Math.min((cat.actual / cat.budgetedAmount) * 100, 100)}%`,
-                              }}
-                            ></div>
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                       {categorySummaries.length > 3 && (
                         <div className="category-budget-more">+{categorySummaries.length - 3} more categories</div>
                       )}
