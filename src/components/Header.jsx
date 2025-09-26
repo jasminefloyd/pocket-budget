@@ -1,3 +1,4 @@
+import PropTypes from "prop-types"
 import { signOut } from "../lib/supabase-mock"
 import { useAuth } from "../contexts/AuthContext"
 
@@ -25,4 +26,9 @@ export default function Header({ title, showLogout = false }) {
       </div>
     </div>
   )
+}
+
+Header.propTypes = {
+  title: PropTypes.string.isRequired,
+  showLogout: PropTypes.bool,
 }

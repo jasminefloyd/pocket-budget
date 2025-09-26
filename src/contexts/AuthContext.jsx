@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState } from "react"
+import PropTypes from "prop-types"
 import { supabase, getCurrentUser, createUserProfile, getUserProfile } from "../lib/supabase"
 
 const AuthContext = createContext({})
@@ -149,4 +150,8 @@ export function AuthProvider({ children }) {
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+AuthProvider.propTypes = {
+  children: PropTypes.node.isRequired,
 }

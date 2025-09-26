@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
 import { getBudgets, getUserCategories, updateUserCategories } from "./lib/supabase"
 import BudgetsScreen from "./screens/BudgetsScreen"
@@ -36,14 +36,10 @@ function AppContent() {
   const [viewMode, setViewMode] = useState("budgets")
   const [isLoading, setIsLoading] = useState(false)
 
-  // Load user data when authenticated
-  useEffect(() => {
-    if (user && !authLoading && !initializing) {
-      loadUserData()
+  const loadUserData = useCallback(async () => {
+    if (!user) {
+      return
     }
-  }, [user, authLoading, initializing])
-
-  const loadUserData = async () => {
     try {
       setIsLoading(true)
 
@@ -87,7 +83,14 @@ function AppContent() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [user])
+
+  // Load user data when authenticated
+  useEffect(() => {
+    if (user && !authLoading && !initializing) {
+      loadUserData()
+    }
+  }, [user, authLoading, initializing, loadUserData])
 
   const handleCategoriesUpdate = async (newCategories) => {
     setCategories(newCategories)
@@ -147,7 +150,6 @@ function AppContent() {
           setBudgets={setBudgets}
           budgets={budgets}
           setSelectedBudget={setSelectedBudget}
-          userId={user.id}
         />
       )}
       {viewMode === "categories" && (

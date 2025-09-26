@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import PropTypes from "prop-types"
 
 export default function AddTransactionModal({ show, onClose, onAdd }) {
   const [name, setName] = useState("")
@@ -79,4 +80,10 @@ export default function AddTransactionModal({ show, onClose, onAdd }) {
       </div>
     </div>
   )
+}
+
+AddTransactionModal.propTypes = {
+  show: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onAdd: PropTypes.func.isRequired,
 }

@@ -1,3 +1,5 @@
+import PropTypes from "prop-types"
+
 export default function LoadingScreen({ message = "Loading" }) {
   return (
     <div className="loading-screen">
@@ -8,4 +10,8 @@ export default function LoadingScreen({ message = "Loading" }) {
       </div>
     </div>
   )
+}
+
+LoadingScreen.propTypes = {
+  message: PropTypes.string,
 }

@@ -1,4 +1,5 @@
 import { useState } from "react"
+import PropTypes from "prop-types"
 
 export default function CategoriesScreen({ categories, setCategories, budgets, setViewMode }) {
   const [tab, setTab] = useState("expense")
@@ -194,4 +195,35 @@ export default function CategoriesScreen({ categories, setCategories, budgets, s
       )}
     </div>
   )
+}
+
+const transactionShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  amount: PropTypes.number.isRequired,
+  budgetedAmount: PropTypes.number,
+  category: PropTypes.string.isRequired,
+  type: PropTypes.oneOf(["income", "expense"]).isRequired,
+  date: PropTypes.string.isRequired,
+  receipt: PropTypes.string,
+})
+
+const categoryShape = PropTypes.shape({
+  name: PropTypes.string.isRequired,
+  icon: PropTypes.string.isRequired,
+})
+
+CategoriesScreen.propTypes = {
+  categories: PropTypes.shape({
+    income: PropTypes.arrayOf(categoryShape).isRequired,
+    expense: PropTypes.arrayOf(categoryShape).isRequired,
+  }).isRequired,
+  setCategories: PropTypes.func.isRequired,
+  budgets: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      transactions: PropTypes.arrayOf(transactionShape).isRequired,
+    }),
+  ).isRequired,
+  setViewMode: PropTypes.func.isRequired,
 }
