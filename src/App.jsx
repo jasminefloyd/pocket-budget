@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
 import { getBudgets, getUserCategories, updateUserCategories } from "./lib/supabase"
+import UpgradeBanner from "./components/UpgradeBanner"
 import BudgetsScreen from "./screens/BudgetsScreen"
 import BudgetDetailsScreen from "./screens/BudgetDetailsScreen"
 import CategoriesScreen from "./screens/CategoriesScreen"
@@ -13,7 +14,17 @@ import Header from "./components/Header"
 import InstallPrompt from "./components/InstallPrompt"
 
 function AppContent() {
-  const { user, loading: authLoading, initializing } = useAuth()
+  const {
+    user,
+    loading: authLoading,
+    initializing,
+    isPaid,
+    isTrialActive,
+    trialEndsAt,
+    upgradeToPlan,
+    planInfo,
+    primaryPaidPlan,
+  } = useAuth()
   const [budgets, setBudgets] = useState([])
   const [categories, setCategories] = useState({
     income: [
@@ -35,6 +46,20 @@ function AppContent() {
   const [selectedBudget, setSelectedBudget] = useState(null)
   const [viewMode, setViewMode] = useState("budgets")
   const [isLoading, setIsLoading] = useState(false)
+  const canAccessAiInsights = isPaid || isTrialActive
+  const upgradePlanId = primaryPaidPlan?.id || planInfo?.id
+
+  useEffect(() => {
+    if (viewMode === "ai" && !canAccessAiInsights) {
+      setViewMode("ai-upsell")
+    }
+  }, [viewMode, canAccessAiInsights])
+
+  useEffect(() => {
+    if (viewMode === "ai-upsell" && canAccessAiInsights) {
+      setViewMode("ai")
+    }
+  }, [viewMode, canAccessAiInsights])
 
   // Load user data when authenticated
   useEffect(() => {
@@ -42,6 +67,23 @@ function AppContent() {
       loadUserData()
     }
   }, [user, authLoading, initializing])
+
+  const handleUpgrade = async (options = {}) => {
+    if (!upgradePlanId) return
+
+    const { error } = await upgradeToPlan(upgradePlanId, options)
+    if (error) {
+      console.error("Upgrade failed:", error)
+    }
+  }
+
+  const handleRequestAiReport = () => {
+    if (canAccessAiInsights) {
+      setViewMode("ai")
+    } else {
+      setViewMode("ai-upsell")
+    }
+  }
 
   const loadUserData = async () => {
     try {
@@ -130,6 +172,16 @@ function AppContent() {
       <Header title="Pocket Budget" showLogout={viewMode === "budgets"} />
       <InstallPrompt />
 
+      {isTrialActive && (
+        <UpgradeBanner
+          variant="trial"
+          plan={primaryPaidPlan || planInfo}
+          trialEndsAt={trialEndsAt}
+          isTrialActive={isTrialActive}
+          onUpgrade={() => handleUpgrade({ startTrial: false })}
+        />
+      )}
+
       {viewMode === "budgets" && (
         <BudgetsScreen
           budgets={budgets}
@@ -148,6 +200,8 @@ function AppContent() {
           budgets={budgets}
           setSelectedBudget={setSelectedBudget}
           userId={user.id}
+          onRequestAi={handleRequestAiReport}
+          canAccessAi={canAccessAiInsights}
         />
       )}
       {viewMode === "categories" && (
@@ -158,7 +212,19 @@ function AppContent() {
           setViewMode={setViewMode}
         />
       )}
-      {viewMode === "ai" && selectedBudget && <AIInsightsScreen budget={selectedBudget} setViewMode={setViewMode} />}
+      {viewMode === "ai" && selectedBudget && canAccessAiInsights && (
+        <AIInsightsScreen budget={selectedBudget} setViewMode={setViewMode} />
+      )}
+      {viewMode === "ai-upsell" && selectedBudget && (
+        <UpgradeBanner
+          variant="upsell"
+          plan={primaryPaidPlan || planInfo}
+          headline={`Unlock AI Finance Reports for ${selectedBudget.name}`}
+          message="AI Finance Reports are available on Pocket Plus. Upgrade to turn your spending into instant insights."
+          onUpgrade={() => handleUpgrade({ startTrial: false })}
+          secondaryAction={{ label: "Back to budget", onClick: () => setViewMode("details") }}
+        />
+      )}
     </div>
   )
 }

@@ -11,6 +11,8 @@ export default function BudgetDetailsScreen({
   budgets,
   setSelectedBudget,
   userId,
+  onRequestAi,
+  canAccessAi = true,
 }) {
   const [tab, setTab] = useState("expenses")
   const [showModal, setShowModal] = useState(false)
@@ -300,8 +302,13 @@ export default function BudgetDetailsScreen({
         <button className="cancelButton secondary-button" onClick={() => setViewMode("budgets")}>
           ← Back
         </button>
-        <button className="ai-insights-button primary-button" onClick={() => setViewMode("ai")}>
-          🧠 AI Finance Report
+        <button
+          className={`ai-insights-button primary-button${canAccessAi ? "" : " locked"}`}
+          onClick={() => (onRequestAi ? onRequestAi() : setViewMode("ai"))}
+          type="button"
+          title={canAccessAi ? "Open AI Finance Report" : "Upgrade to unlock AI Finance Reports"}
+        >
+          {canAccessAi ? "🧠 AI Finance Report" : "Unlock AI Finance Report"}
         </button>
       </div>
 

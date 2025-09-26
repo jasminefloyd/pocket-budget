@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js"
+import { PLAN_IDS, calculateTrialEndDate } from "./plans"
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -33,7 +34,19 @@ const DEMO_ADMIN = {
     email: "test@me.com",
     full_name: "Demo Admin",
     created_at: new Date().toISOString(),
+    plan: PLAN_IDS.PLUS,
+    trial_ends_at: null,
+    ads_enabled: false,
   },
+}
+
+let demoSubscription = {
+  user_id: DEMO_ADMIN.user.id,
+  plan: PLAN_IDS.PLUS,
+  status: "active",
+  trial_ends_at: null,
+  ads_enabled: false,
+  updated_at: new Date().toISOString(),
 }
 
 // Auth helper functions
@@ -135,6 +148,8 @@ export const createUserProfile = async (userId, email, fullName) => {
     return { data: [DEMO_ADMIN.profile], error: null }
   }
 
+  const trialEndsAt = calculateTrialEndDate().toISOString()
+
   const { data, error } = await supabase
     .from("user_profiles")
     .insert([
@@ -143,6 +158,9 @@ export const createUserProfile = async (userId, email, fullName) => {
         email,
         full_name: fullName,
         created_at: new Date().toISOString(),
+        plan: PLAN_IDS.FREE,
+        trial_ends_at: trialEndsAt,
+        ads_enabled: true,
       },
     ])
     .select()
@@ -157,6 +175,81 @@ export const getUserProfile = async (userId) => {
 
   const { data, error } = await supabase.from("user_profiles").select("*").eq("id", userId).single()
   return { data, error }
+}
+
+export const updateUserProfile = async (userId, updates) => {
+  // For demo admin, update mock profile in memory
+  if (userId === DEMO_ADMIN.user.id) {
+    DEMO_ADMIN.profile = {
+      ...DEMO_ADMIN.profile,
+      ...updates,
+    }
+    return { data: DEMO_ADMIN.profile, error: null }
+  }
+
+  const updatePayload = { ...updates }
+  delete updatePayload.id
+
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .update(updatePayload)
+    .eq("id", userId)
+    .select()
+    .single()
+
+  return { data, error }
+}
+
+export const getUserSubscription = async (userId) => {
+  if (userId === DEMO_ADMIN.user.id) {
+    return { data: demoSubscription, error: null }
+  }
+
+  const { data, error } = await supabase.from("user_subscriptions").select("*").eq("user_id", userId).single()
+
+  if (error && error.code === "PGRST116") {
+    return { data: null, error: null }
+  }
+
+  return { data, error }
+}
+
+export const upsertUserSubscription = async (userId, subscriptionData) => {
+  const payload = {
+    user_id: userId,
+    ...subscriptionData,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (userId === DEMO_ADMIN.user.id) {
+    demoSubscription = {
+      ...demoSubscription,
+      ...payload,
+    }
+    return { data: demoSubscription, error: null }
+  }
+
+  const { data, error } = await supabase
+    .from("user_subscriptions")
+    .upsert([payload], { onConflict: "user_id" })
+    .select()
+
+  if (error) {
+    return { data: null, error }
+  }
+
+  return { data: data?.[0] ?? null, error: null }
+}
+
+export const cancelUserSubscription = async (userId, additionalUpdates = {}) => {
+  const basePayload = {
+    plan: PLAN_IDS.FREE,
+    status: "canceled",
+    trial_ends_at: null,
+    ads_enabled: true,
+  }
+
+  return await upsertUserSubscription(userId, { ...basePayload, ...additionalUpdates })
 }
 
 // Demo data storage (in-memory for demo admin)

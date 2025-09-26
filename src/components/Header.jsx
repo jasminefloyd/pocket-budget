@@ -1,4 +1,4 @@
-import { signOut } from "../lib/supabase-mock"
+import { signOut } from "../lib/supabase"
 import { useAuth } from "../contexts/AuthContext"
 
 export default function Header({ title, showLogout = false }) {
