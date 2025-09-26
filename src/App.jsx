@@ -155,6 +155,7 @@ function AppContent() {
           categories={categories}
           setCategories={handleCategoriesUpdate}
           budgets={budgets}
+          setBudgets={setBudgets}
           setViewMode={setViewMode}
         />
       )}
