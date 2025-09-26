@@ -1,19 +1,19 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
 import { getBudgets, getUserCategories, updateUserCategories } from "./lib/supabase"
 import BudgetsScreen from "./screens/BudgetsScreen"
 import BudgetDetailsScreen from "./screens/BudgetDetailsScreen"
 import CategoriesScreen from "./screens/CategoriesScreen"
-import AIInsightsScreen from "./screens/AIInsightsScreen"
 import GoalsScreen from "./screens/GoalsScreen"
-import LoginScreen from "./screens/LoginScreen"
+import AIInsightsScreen from "./screens/AIInsightsScreen"
 import LoadingScreen from "./components/LoadingScreen"
+import LoginScreen from "./screens/LoginScreen"
 import Header from "./components/Header"
 import InstallPrompt from "./components/InstallPrompt"
 
-const BASE_CATEGORIES = {
+const DEFAULT_CATEGORIES = {
   income: [
     { name: "Salary", icon: "💼" },
     { name: "Freelance", icon: "💻" },
@@ -31,119 +31,114 @@ const BASE_CATEGORIES = {
   ],
 }
 
-const createDefaultCategories = () => ({
-  income: BASE_CATEGORIES.income.map((category) => ({ ...category })),
-  expense: BASE_CATEGORIES.expense.map((category) => ({ ...category })),
+const cloneDefaultCategories = () => ({
+  income: DEFAULT_CATEGORIES.income.map((category) => ({ ...category })),
+  expense: DEFAULT_CATEGORIES.expense.map((category) => ({ ...category })),
 })
 
 function AppContent() {
-  const { user, loading: authLoading, initializing } = useAuth()
+  const { user, loading: authLoading, initializing, status: authStatus } = useAuth()
   const [budgets, setBudgets] = useState([])
-  const [categories, setCategories] = useState(createDefaultCategories)
+  const [categories, setCategories] = useState(cloneDefaultCategories)
   const [selectedBudget, setSelectedBudget] = useState(null)
   const [viewMode, setViewMode] = useState("budgets")
-  const [isLoading, setIsLoading] = useState(false)
+  const [dataPhase, setDataPhase] = useState("idle")
+
+  const shouldShowAuthLoading = initializing || authLoading || authStatus === "auth-transition"
 
   useEffect(() => {
     if (!user) {
       setBudgets([])
-      setCategories(createDefaultCategories())
-      setIsLoading(false)
+      setCategories(cloneDefaultCategories())
+      setSelectedBudget(null)
+      setViewMode("budgets")
+      setDataPhase("idle")
     }
   }, [user])
 
-  // Load user data when authenticated
   useEffect(() => {
     if (!user || authLoading || initializing) {
-      return undefined
+      return
     }
 
-    let isActive = true
-    setIsLoading(true)
+    let isCurrent = true
+    setDataPhase("loading")
 
-    const budgetsPromise = getBudgets(user.id)
-    const categoriesPromise = getUserCategories(user.id)
+    const fetchBudgets = getBudgets(user.id)
+    const fetchCategories = getUserCategories(user.id)
 
-    budgetsPromise
-      .then(({ data: budgetsData, error: budgetsError }) => {
-        if (!isActive) return
+    Promise.allSettled([fetchBudgets, fetchCategories]).then((results) => {
+      if (!isCurrent) return
 
-        if (budgetsError) {
-          console.error("Error loading budgets:", budgetsError)
-          return
+      const [budgetResult, categoryResult] = results
+
+      if (budgetResult.status === "fulfilled") {
+        const { data: budgetsData, error } = budgetResult.value
+        if (error) {
+          console.error("Error loading budgets:", error)
         }
+        const normalizedBudgets = (budgetsData || []).map((budget) => ({
+          id: budget.id,
+          name: budget.name,
+          createdAt: new Date(budget.created_at).toLocaleDateString(),
+          categoryBudgets: budget.category_budgets || [],
+          transactions: (budget.transactions || []).map((tx) => ({
+            id: tx.id,
+            name: tx.name,
+            amount: Number(tx.amount || 0),
+            budgetedAmount: tx.budgeted_amount ?? null,
+            category: tx.category,
+            type: tx.type,
+            date: tx.date,
+            receipt: tx.receipt_url ?? null,
+          })),
+        }))
+        setBudgets(normalizedBudgets)
+      } else {
+        console.error("Unexpected error resolving budgets:", budgetResult.reason)
+      }
 
-        const transformedBudgets =
-          budgetsData?.map((budget) => ({
-            id: budget.id,
-            name: budget.name,
-            createdAt: new Date(budget.created_at).toLocaleDateString(),
-            categoryBudgets: budget.category_budgets || [],
-            transactions:
-              budget.transactions?.map((tx) => ({
-                id: tx.id,
-                name: tx.name,
-                amount: tx.amount,
-                budgetedAmount: tx.budgeted_amount,
-                category: tx.category,
-                type: tx.type,
-                date: tx.date,
-                receipt: tx.receipt_url,
-              })) || [],
-          })) || []
-
-        setBudgets(transformedBudgets)
-      })
-      .catch((error) => {
-        if (!isActive) return
-        console.error("Error loading budgets:", error)
-      })
-      .finally(() => {
-        if (isActive) {
-          setIsLoading(false)
+      if (categoryResult.status === "fulfilled") {
+        const { data: categoriesData, error } = categoryResult.value
+        if (error && error.code !== "PGRST116") {
+          console.error("Error loading categories:", error)
         }
-      })
-
-    categoriesPromise
-      .then(({ data: categoriesData, error: categoriesError }) => {
-        if (!isActive) return
-
-        if (categoriesError && categoriesError.code !== "PGRST116") {
-          console.error("Error loading categories:", categoriesError)
-          return
-        }
-
         if (categoriesData?.categories) {
           setCategories(categoriesData.categories)
+        } else if (error?.code === "PGRST116") {
+          setCategories(cloneDefaultCategories())
         }
-      })
-      .catch((error) => {
-        if (!isActive) return
-        console.error("Error loading categories:", error)
-      })
+      } else {
+        console.error("Unexpected error resolving categories:", categoryResult.reason)
+      }
+
+      setDataPhase("ready")
+    })
 
     return () => {
-      isActive = false
+      isCurrent = false
     }
   }, [user, authLoading, initializing])
 
-  const handleCategoriesUpdate = async (newCategories) => {
-    setCategories(newCategories)
-    if (user) {
-      try {
-        await updateUserCategories(user.id, newCategories)
-      } catch (error) {
-        console.error("Error updating categories:", error)
-      }
+  const updateCategories = async (nextCategories) => {
+    setCategories(nextCategories)
+    if (!user) return
+    try {
+      await updateUserCategories(user.id, nextCategories)
+    } catch (error) {
+      console.error("Error updating categories:", error)
     }
   }
 
-  // Show loading screen only during initial auth check (with timeout protection)
+  const activeBudget = useMemo(
+    () => budgets.find((budget) => budget.id === selectedBudget?.id) || selectedBudget,
+    [budgets, selectedBudget],
+  )
+
   if (initializing) {
-    return <LoadingScreen message="Initializing" />
+    return <LoadingScreen message="Checking your account" />
   }
 
-  // Show login screen if not authenticated
   if (!user && !authLoading) {
     return (
       <>
@@ -153,14 +148,12 @@ function AppContent() {
     )
   }
 
-  // Show loading screen while loading user data (only after auth is confirmed)
-  if (user && isLoading) {
-    return <LoadingScreen message="Loading your data" />
+  if (shouldShowAuthLoading) {
+    return <LoadingScreen message="Preparing your experience" />
   }
 
-  // If we have a user but still loading auth, show a brief loading state
-  if (authLoading && user) {
-    return <LoadingScreen message="Setting up your account" />
+  if (user && dataPhase !== "ready") {
+    return <LoadingScreen message={dataPhase === "loading" ? "Loading your budgets" : "Setting things up"} />
   }
 
   return (
@@ -177,12 +170,14 @@ function AppContent() {
           userId={user.id}
         />
       )}
+
       {viewMode === "goals" && (
         <GoalsScreen setViewMode={setViewMode} budgets={budgets} setBudgets={setBudgets} />
       )}
-      {viewMode === "details" && selectedBudget && (
+
+      {viewMode === "details" && activeBudget && (
         <BudgetDetailsScreen
-          budget={selectedBudget}
+          budget={activeBudget}
           categories={categories}
           setViewMode={setViewMode}
           setBudgets={setBudgets}
@@ -190,15 +185,17 @@ function AppContent() {
           setSelectedBudget={setSelectedBudget}
         />
       )}
+
       {viewMode === "categories" && (
         <CategoriesScreen
           categories={categories}
-          setCategories={handleCategoriesUpdate}
+          setCategories={updateCategories}
           budgets={budgets}
           setViewMode={setViewMode}
         />
       )}
-      {viewMode === "ai" && selectedBudget && <AIInsightsScreen budget={selectedBudget} setViewMode={setViewMode} />}
+
+      {viewMode === "ai" && activeBudget && <AIInsightsScreen budget={activeBudget} setViewMode={setViewMode} />}
     </div>
   )
 }

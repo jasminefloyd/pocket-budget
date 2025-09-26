@@ -1,10 +1,12 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import PropTypes from "prop-types"
-import { supabase, getCurrentUser, createUserProfile, getUserProfile } from '../lib/supabase'
+import { createUserProfile, getCurrentUser, getUserProfile, supabase } from "../lib/supabase"
 
-const AuthContext = createContext({})
+const AuthContext = createContext(undefined)
+
+const SESSION_TIMEOUT_MS = 10000
 
 export function useAuth() {
   const context = useContext(AuthContext)
@@ -19,192 +21,150 @@ export function AuthProvider({ children }) {
   const [userProfile, setUserProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [initializing, setInitializing] = useState(true)
-  const isMountedRef = useRef(true)
+  const [status, setStatus] = useState("checking-session")
 
-  const setUserProfileSafe = useCallback(
+  const mountedRef = useRef(true)
+
+  const safeSetState = useCallback((setter) => {
+    if (!mountedRef.current) return
+    setter()
+  }, [])
+
+  const applyProfile = useCallback(
     (profile) => {
-      if (isMountedRef.current) {
-        setUserProfile(profile)
-      }
+      safeSetState(() => setUserProfile(profile))
     },
-    [setUserProfile],
+    [safeSetState],
   )
 
-  const loadUserProfile = useCallback(async (userId, sessionUser) => {
-    try {
-      const { data: profile, error } = await getUserProfile(userId)
-
-      if (error && error.code === "PGRST116") {
-        if (!sessionUser) {
-          setUserProfileSafe(null)
-          return
-        }
-
-        const { data: newProfile, error: createError } = await createUserProfile(
-          sessionUser.id,
-          sessionUser.email,
-          sessionUser.user_metadata?.full_name || sessionUser.email,
-        )
-
-        if (createError) {
-          console.error("Error creating user profile:", createError)
-          setUserProfileSafe(null)
-          return
-        }
-
-        setUserProfileSafe(newProfile?.[0] || null)
-      } else if (!error) {
-        setUserProfileSafe(profile)
-      } else {
-        console.error("Error loading user profile:", error)
-        setUserProfileSafe(null)
+  const ensureProfile = useCallback(
+    async (sessionUser) => {
+      if (!sessionUser) {
+        applyProfile(null)
+        return
       }
-    } catch (error) {
-      console.error("Error loading user profile:", error)
-      // Don't block the app if profile loading fails
-      setUserProfileSafe(null)
-    }
-  }, [setUserProfileSafe])
+
+      try {
+        setStatus("loading-profile")
+        const { data, error } = await getUserProfile(sessionUser.id)
+
+        if (error && error.code === "PGRST116") {
+          const fullName = sessionUser.user_metadata?.full_name || sessionUser.email
+          const { data: newProfile, error: createError } = await createUserProfile(
+            sessionUser.id,
+            sessionUser.email,
+            fullName,
+          )
+
+          if (createError) {
+            console.error("Error creating profile", createError)
+            applyProfile(null)
+            return
+          }
+
+          applyProfile(newProfile?.[0] || null)
+          return
+        }
+
+        if (error) {
+          console.error("Error loading profile", error)
+          applyProfile(null)
+          return
+        }
+
+        applyProfile(data)
+      } catch (profileError) {
+        console.error("Unexpected profile error", profileError)
+        applyProfile(null)
+      } finally {
+        safeSetState(() => setLoading(false))
+        setStatus("ready")
+      }
+    },
+    [applyProfile, safeSetState],
+  )
+
+  const handleSession = useCallback(
+    async (sessionUser) => {
+      safeSetState(() => setUser(sessionUser))
+      if (sessionUser) {
+        safeSetState(() => setLoading(true))
+        await ensureProfile(sessionUser)
+      } else {
+        applyProfile(null)
+        safeSetState(() => setLoading(false))
+        setStatus("signed-out")
+      }
+    },
+    [applyProfile, ensureProfile, safeSetState],
+  )
 
   useEffect(() => {
-    isMountedRef.current = true
+    mountedRef.current = true
 
-    // Get initial session with timeout
-    const getInitialSession = async () => {
+    const resolveInitialSession = async () => {
       try {
-        // Add timeout to prevent infinite loading
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Session timeout")), 10000))
-
-        const sessionPromise = getCurrentUser()
-
-        const { user: currentUser } = await Promise.race([sessionPromise, timeoutPromise])
-
-        if (!isMountedRef.current) return
-
-        setUser(currentUser)
-
-        if (currentUser) {
-          setLoading(true)
-          loadUserProfile(currentUser.id, currentUser).finally(() => {
-            if (isMountedRef.current) {
-              setLoading(false)
-            }
-          })
-        } else {
-          setUserProfileSafe(null)
-          setLoading(false)
-        }
+        setStatus("checking-session")
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Session lookup timed out")), SESSION_TIMEOUT_MS),
+        )
+        const { user: sessionUser } = await Promise.race([getCurrentUser(), timeout])
+        if (!mountedRef.current) return
+        await handleSession(sessionUser)
       } catch (error) {
-        console.error("Error getting initial session:", error)
-        // Don't stay stuck - continue with no user
-        if (isMountedRef.current) {
+        console.warn("Failed to resolve initial session", error)
+        if (!mountedRef.current) return
+        safeSetState(() => {
           setUser(null)
-          setUserProfileSafe(null)
+          setUserProfile(null)
           setLoading(false)
-        }
+        })
+        setStatus("signed-out")
       } finally {
-        if (isMountedRef.current) {
+        if (mountedRef.current) {
           setInitializing(false)
         }
       }
     }
 
-    getInitialSession()
+    resolveInitialSession()
 
-    // Listen for auth changes (both Supabase and demo)
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMountedRef.current) return
-
-      console.log("Auth state changed:", event, session?.user?.id)
-
-      try {
-        setUser(session?.user ?? null)
-
-        if (session?.user) {
-          setLoading(true)
-          loadUserProfile(session.user.id, session.user)
-            .catch((error) => {
-              console.error("Error handling auth state change:", error)
-            })
-            .finally(() => {
-              if (isMountedRef.current) {
-                setLoading(false)
-                setInitializing(false)
-              }
-            })
-          return
-        }
-
-        setUserProfileSafe(null)
-        if (isMountedRef.current) {
-          setLoading(false)
-          setInitializing(false)
-        }
-      } catch (error) {
-        console.error("Error handling auth state change:", error)
-        if (isMountedRef.current) {
-          setLoading(false)
-          setInitializing(false)
-        }
-      }
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mountedRef.current) return
+      setStatus("auth-transition")
+      await handleSession(session?.user ?? null)
     })
 
-    // Listen for demo auth changes
     const handleDemoAuthChange = async (event) => {
-      if (!isMountedRef.current) return
-
-      const { session, event: authEvent } = event.detail
-      console.log("Demo auth state changed:", authEvent, session?.user?.id)
-
-      try {
-        setUser(session?.user ?? null)
-
-        if (session?.user) {
-          setLoading(true)
-          loadUserProfile(session.user.id, session.user)
-            .catch((error) => {
-              console.error("Error handling demo auth state change:", error)
-            })
-            .finally(() => {
-              if (isMountedRef.current) {
-                setLoading(false)
-                setInitializing(false)
-              }
-            })
-          return
-        }
-
-        setUserProfileSafe(null)
-        if (isMountedRef.current) {
-          setLoading(false)
-          setInitializing(false)
-        }
-      } catch (error) {
-        console.error("Error handling demo auth state change:", error)
-        if (isMountedRef.current) {
-          setLoading(false)
-          setInitializing(false)
-        }
-      }
+      if (!mountedRef.current) return
+      const { session } = event.detail || {}
+      setStatus("auth-transition")
+      await handleSession(session?.user ?? null)
     }
 
-    window.addEventListener("demo-auth-change", handleDemoAuthChange)
+    if (typeof window !== "undefined") {
+      window.addEventListener("demo-auth-change", handleDemoAuthChange)
+    }
 
     return () => {
-      isMountedRef.current = false
-      subscription.unsubscribe()
-      window.removeEventListener("demo-auth-change", handleDemoAuthChange)
+      mountedRef.current = false
+      authListener.subscription.unsubscribe()
+      if (typeof window !== "undefined") {
+        window.removeEventListener("demo-auth-change", handleDemoAuthChange)
+      }
     }
-  }, [loadUserProfile, setUserProfileSafe])
+  }, [handleSession, safeSetState])
 
-  const value = {
-    user,
-    userProfile,
-    loading,
-    initializing,
-  }
+  const value = useMemo(
+    () => ({
+      user,
+      userProfile,
+      loading,
+      initializing,
+      status,
+    }),
+    [user, userProfile, loading, initializing, status],
+  )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

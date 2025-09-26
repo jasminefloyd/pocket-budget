@@ -1,167 +1,38 @@
 import { createClient } from "@supabase/supabase-js"
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const REQUIRED_ENV_VARS = ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"]
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Missing Supabase environment variables. Please check your .env file.")
+const missing = REQUIRED_ENV_VARS.filter((key) => !import.meta.env[key])
+if (missing.length) {
+  throw new Error(`Missing Supabase environment variables: ${missing.join(", ")}`)
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    flowType: "pkce", // Add PKCE flow for better security and reliability
+    flowType: "pkce",
   },
 })
 
-// Hardcoded admin user for demo/testing
+const storage = typeof window !== "undefined" ? window.localStorage : null
+
 const DEMO_ADMIN = {
+  id: "demo-admin-user-id",
   email: "test@me.com",
   password: "pass123",
-  user: {
-    id: "demo-admin-user-id",
-    email: "test@me.com",
-    user_metadata: {
-      full_name: "Demo Admin",
-    },
-    created_at: new Date().toISOString(),
-  },
-  profile: {
-    id: "demo-admin-user-id",
-    email: "test@me.com",
-    full_name: "Demo Admin",
-    created_at: new Date().toISOString(),
-  },
+  name: "Demo Admin",
 }
 
-// Auth helper functions
-export const signUp = async (email, password) => {
-  // Check if it's the demo admin trying to sign up
-  if (email === DEMO_ADMIN.email && password === DEMO_ADMIN.password) {
-    // For demo admin, just redirect to sign in
-    return await signIn(email, password)
-  }
+const createDemoProfile = () => ({
+  id: DEMO_ADMIN.id,
+  email: DEMO_ADMIN.email,
+  full_name: DEMO_ADMIN.name,
+  created_at: new Date().toISOString(),
+})
 
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-  })
-  return { data, error }
-}
-
-export const signIn = async (email, password) => {
-  // Check if it's the demo admin
-  if (email === DEMO_ADMIN.email && password === DEMO_ADMIN.password) {
-    // Create a mock session for demo admin
-    const mockSession = {
-      user: DEMO_ADMIN.user,
-      access_token: "demo-admin-token",
-      refresh_token: "demo-admin-refresh",
-      expires_in: 3600,
-      token_type: "bearer",
-    }
-
-    // Store demo session in localStorage to persist across page reloads
-    localStorage.setItem("demo-admin-session", JSON.stringify(mockSession))
-
-    // Trigger auth state change manually
-    window.dispatchEvent(
-      new CustomEvent("demo-auth-change", {
-        detail: { session: mockSession, event: "SIGNED_IN" },
-      }),
-    )
-
-    return { data: { user: DEMO_ADMIN.user, session: mockSession }, error: null }
-  }
-
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  })
-  return { data, error }
-}
-
-export const signInWithGoogle = async () => {
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: window.location.origin,
-    },
-  })
-  return { data, error }
-}
-
-export const signOut = async () => {
-  // Clear demo session if it exists
-  localStorage.removeItem("demo-admin-session")
-
-  // Trigger auth state change for demo user
-  window.dispatchEvent(
-    new CustomEvent("demo-auth-change", {
-      detail: { session: null, event: "SIGNED_OUT" },
-    }),
-  )
-
-  const { error } = await supabase.auth.signOut()
-  return { error }
-}
-
-export const getCurrentUser = async () => {
-  try {
-    // Check for demo admin session first
-    const demoSession = localStorage.getItem("demo-admin-session")
-    if (demoSession) {
-      const session = JSON.parse(demoSession)
-      return { user: session.user, error: null }
-    }
-
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser()
-    return { user, error }
-  } catch (error) {
-    console.error("Error getting current user:", error)
-    return { user: null, error }
-  }
-}
-
-// Database helper functions with demo admin support
-export const createUserProfile = async (userId, email, fullName) => {
-  // For demo admin, return mock profile
-  if (userId === DEMO_ADMIN.user.id) {
-    return { data: [DEMO_ADMIN.profile], error: null }
-  }
-
-  const { data, error } = await supabase
-    .from("user_profiles")
-    .insert([
-      {
-        id: userId,
-        email,
-        full_name: fullName,
-        created_at: new Date().toISOString(),
-      },
-    ])
-    .select()
-  return { data, error }
-}
-
-export const getUserProfile = async (userId) => {
-  // For demo admin, return mock profile
-  if (userId === DEMO_ADMIN.user.id) {
-    return { data: DEMO_ADMIN.profile, error: null }
-  }
-
-  const { data, error } = await supabase.from("user_profiles").select("*").eq("id", userId).single()
-  return { data, error }
-}
-
-// Demo data storage (in-memory for demo admin)
-let demoBudgets = []
-let demoCategories = {
+const DEMO_CATEGORIES = {
   income: [
     { name: "Salary", icon: "💼" },
     { name: "Freelance", icon: "💻" },
@@ -179,39 +50,206 @@ let demoCategories = {
   ],
 }
 
-let demoGoals = []
-let demoGoalContributions = []
+const cloneCategories = (categories) => ({
+  income: [...(categories?.income || [])].map((category) => ({ ...category })),
+  expense: [...(categories?.expense || [])].map((category) => ({ ...category })),
+})
+
+const demoStore = {
+  session: null,
+  profile: createDemoProfile(),
+  categories: cloneCategories(DEMO_CATEGORIES),
+  budgets: [],
+  goals: [],
+  contributions: [],
+}
+
+const persistDemoSession = (session) => {
+  demoStore.session = session
+  if (storage) {
+    if (session) {
+      storage.setItem("demo-admin-session", JSON.stringify(session))
+    } else {
+      storage.removeItem("demo-admin-session")
+    }
+  }
+}
+
+const hydrateDemoSession = () => {
+  if (demoStore.session) return demoStore.session
+  if (!storage) return null
+  try {
+    const raw = storage.getItem("demo-admin-session")
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed?.user) return null
+    demoStore.session = parsed
+    return parsed
+  } catch (error) {
+    console.error("Failed to hydrate demo session", error)
+    return null
+  }
+}
+
+const demoUser = {
+  id: DEMO_ADMIN.id,
+  email: DEMO_ADMIN.email,
+  user_metadata: {
+    full_name: DEMO_ADMIN.name,
+  },
+  created_at: new Date().toISOString(),
+}
+
+const createDemoSession = () => ({
+  user: demoUser,
+  access_token: "demo-admin-token",
+  refresh_token: "demo-admin-refresh",
+  token_type: "bearer",
+  expires_in: 3600,
+})
+
+const isDemoUser = (userId) => userId === DEMO_ADMIN.id
+
+const ensureDemoBudgetShape = (budget) => ({
+  ...budget,
+  transactions: [...(budget.transactions || [])],
+  category_budgets: [...(budget.category_budgets || [])],
+})
+
+const normalizeTransactionRecord = (transaction) => ({
+  ...transaction,
+  budgeted_amount: transaction.budgeted_amount ?? transaction.budgetedAmount ?? null,
+  receipt_url: transaction.receipt_url ?? transaction.receipt ?? null,
+})
+
+const normalizeGoal = (goal) => ({
+  ...goal,
+  milestones: goal.milestones && goal.milestones.length ? goal.milestones : [25, 50, 75, 100],
+})
+
+const selectGoalWithRelations = (goal) => ({
+  ...normalizeGoal(goal),
+  goal_contributions: (demoStore.contributions || [])
+    .filter((contribution) => contribution.goal_id === goal.id)
+    .sort((a, b) => new Date(b.contributed_at) - new Date(a.contributed_at)),
+})
+
+export const signUp = async (email, password) => {
+  if (email === DEMO_ADMIN.email) {
+    return signIn(email, password)
+  }
+  return supabase.auth.signUp({ email, password })
+}
+
+export const signIn = async (email, password) => {
+  if (email === DEMO_ADMIN.email && password === DEMO_ADMIN.password) {
+    const session = createDemoSession()
+    persistDemoSession(session)
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("demo-auth-change", { detail: { session, event: "SIGNED_IN" } }))
+    }
+    return { data: { user: session.user, session }, error: null }
+  }
+  return supabase.auth.signInWithPassword({ email, password })
+}
+
+export const signInWithGoogle = async () => {
+  return supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: window.location.origin,
+    },
+  })
+}
+
+export const signOut = async () => {
+  persistDemoSession(null)
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("demo-auth-change", { detail: { session: null, event: "SIGNED_OUT" } }))
+  }
+  return supabase.auth.signOut()
+}
+
+export const getCurrentUser = async () => {
+  const demoSession = hydrateDemoSession()
+  if (demoSession?.user) {
+    return { user: demoSession.user, error: null }
+  }
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser()
+  return { user, error }
+}
+
+export const createUserProfile = async (userId, email, fullName) => {
+  if (isDemoUser(userId)) {
+    demoStore.profile = {
+      id: userId,
+      email,
+      full_name: fullName,
+      created_at: new Date().toISOString(),
+    }
+    return { data: [demoStore.profile], error: null }
+  }
+
+  return supabase
+    .from("user_profiles")
+    .insert([
+      {
+        id: userId,
+        email,
+        full_name: fullName,
+        created_at: new Date().toISOString(),
+      },
+    ])
+    .select()
+}
+
+export const getUserProfile = async (userId) => {
+  if (isDemoUser(userId)) {
+    return { data: demoStore.profile, error: null }
+  }
+  return supabase.from("user_profiles").select("*").eq("id", userId).single()
+}
+
+const demoBudgets = () => demoStore.budgets
+
+const findDemoBudget = (budgetId) => demoBudgets().find((budget) => budget.id === budgetId)
 
 export const getBudgets = async (userId) => {
-  // For demo admin, return in-memory data
-  if (userId === DEMO_ADMIN.user.id) {
-    return { data: demoBudgets, error: null }
+  if (isDemoUser(userId)) {
+    return { data: demoBudgets().map(ensureDemoBudgetShape), error: null }
   }
 
   const { data, error } = await supabase
     .from("budgets")
-    .select(`
-      *,
-      transactions (*)
-    `)
+    .select(`*, transactions (*)`)
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-  return { data, error }
+
+  return {
+    data: (data || []).map((budget) => ({
+      ...budget,
+      transactions: (budget.transactions || []).map(normalizeTransactionRecord),
+    })),
+    error,
+  }
 }
 
 export const createBudget = async (userId, budgetData) => {
-  // For demo admin, store in memory
-  if (userId === DEMO_ADMIN.user.id) {
-    const newBudget = {
-      id: `demo-budget-${Date.now()}`,
-      user_id: userId,
-      name: budgetData.name,
-      category_budgets: budgetData.categoryBudgets || [],
-      created_at: new Date().toISOString(),
-      transactions: [],
-    }
-    demoBudgets.unshift(newBudget)
-    return { data: [newBudget], error: null }
+  const payload = {
+    user_id: userId,
+    name: budgetData.name,
+    category_budgets: budgetData.categoryBudgets || [],
+    created_at: new Date().toISOString(),
+    transactions: [],
+  }
+
+  if (isDemoUser(userId)) {
+    const demoBudget = { ...payload, id: `demo-budget-${Date.now()}` }
+    demoStore.budgets = [demoBudget, ...demoStore.budgets]
+    return { data: [ensureDemoBudgetShape(demoBudget)], error: null }
   }
 
   const { data, error } = await supabase
@@ -221,209 +259,186 @@ export const createBudget = async (userId, budgetData) => {
         user_id: userId,
         name: budgetData.name,
         category_budgets: budgetData.categoryBudgets || [],
-        created_at: new Date().toISOString(),
       },
     ])
-    .select()
-  return { data, error }
+    .select(`*, transactions (*)`)
+
+  return {
+    data: (data || []).map((budget) => ({
+      ...budget,
+      transactions: (budget.transactions || []).map(normalizeTransactionRecord),
+    })),
+    error,
+  }
 }
 
 export const updateBudget = async (budgetId, budgetData) => {
-  // For demo admin, update in memory
   if (budgetId.startsWith("demo-budget-")) {
-    const budgetIndex = demoBudgets.findIndex((b) => b.id === budgetId)
-    if (budgetIndex !== -1) {
-      demoBudgets[budgetIndex] = {
-        ...demoBudgets[budgetIndex],
-        name: budgetData.name,
-        category_budgets: budgetData.categoryBudgets || [],
-      }
-      return { data: [demoBudgets[budgetIndex]], error: null }
+    const target = findDemoBudget(budgetId)
+    if (!target) {
+      return { data: null, error: { message: "Budget not found" } }
     }
-    return { data: null, error: { message: "Budget not found" } }
+    Object.assign(target, {
+      name: budgetData.name ?? target.name,
+      category_budgets: budgetData.categoryBudgets ?? target.category_budgets,
+    })
+    return { data: [ensureDemoBudgetShape(target)], error: null }
   }
+
+  const updates = {
+    name: budgetData.name,
+    category_budgets: budgetData.categoryBudgets,
+  }
+
+  const filteredUpdates = Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined))
 
   const { data, error } = await supabase
     .from("budgets")
-    .update({
-      name: budgetData.name,
-      category_budgets: budgetData.categoryBudgets || [],
-    })
+    .update(filteredUpdates)
     .eq("id", budgetId)
-    .select()
-  return { data, error }
+    .select(`*, transactions (*)`)
+
+  return {
+    data: (data || []).map((budget) => ({
+      ...budget,
+      transactions: (budget.transactions || []).map(normalizeTransactionRecord),
+    })),
+    error,
+  }
 }
 
 export const deleteBudget = async (budgetId) => {
-  // For demo admin, remove from memory
   if (budgetId.startsWith("demo-budget-")) {
-    demoBudgets = demoBudgets.filter((b) => b.id !== budgetId)
+    demoStore.budgets = demoStore.budgets.filter((budget) => budget.id !== budgetId)
+    demoStore.contributions = demoStore.contributions.filter((contribution) => contribution.linked_budget_id !== budgetId)
     return { error: null }
   }
-
-  const { error } = await supabase.from("budgets").delete().eq("id", budgetId)
-  return { error }
+  return supabase.from("budgets").delete().eq("id", budgetId)
 }
 
 export const createTransaction = async (budgetId, transactionData) => {
-  // For demo admin, store in memory
-  if (budgetId.startsWith("demo-budget-")) {
-    const budgetIndex = demoBudgets.findIndex((b) => b.id === budgetId)
-    if (budgetIndex !== -1) {
-      const newTransaction = {
-        id: `demo-tx-${Date.now()}`,
-        budget_id: budgetId,
-        name: transactionData.name,
-        amount: transactionData.amount,
-        budgeted_amount: transactionData.budgetedAmount,
-        category: transactionData.category,
-        type: transactionData.type,
-        date: transactionData.date,
-        receipt_url: transactionData.receipt,
-        created_at: new Date().toISOString(),
-      }
-
-      if (!demoBudgets[budgetIndex].transactions) {
-        demoBudgets[budgetIndex].transactions = []
-      }
-      demoBudgets[budgetIndex].transactions.push(newTransaction)
-
-      return { data: [newTransaction], error: null }
-    }
-    return { data: null, error: { message: "Budget not found" } }
+  const payload = {
+    budget_id: budgetId,
+    name: transactionData.name,
+    amount: transactionData.amount,
+    budgeted_amount: transactionData.budgetedAmount ?? null,
+    category: transactionData.category,
+    type: transactionData.type,
+    date: transactionData.date,
+    receipt_url: transactionData.receipt ?? null,
+    created_at: new Date().toISOString(),
   }
 
-  const { data, error } = await supabase
-    .from("transactions")
-    .insert([
-      {
-        budget_id: budgetId,
-        name: transactionData.name,
-        amount: transactionData.amount,
-        budgeted_amount: transactionData.budgetedAmount,
-        category: transactionData.category,
-        type: transactionData.type,
-        date: transactionData.date,
-        receipt_url: transactionData.receipt,
-        created_at: new Date().toISOString(),
-      },
-    ])
-    .select()
-  return { data, error }
+  if (budgetId.startsWith("demo-budget-")) {
+    const budget = findDemoBudget(budgetId)
+    if (!budget) {
+      return { data: null, error: { message: "Budget not found" } }
+    }
+    const demoTransaction = { ...payload, id: `demo-tx-${Date.now()}` }
+    budget.transactions = [...(budget.transactions || []), demoTransaction]
+    return { data: [normalizeTransactionRecord(demoTransaction)], error: null }
+  }
+
+  const { data, error } = await supabase.from("transactions").insert([payload]).select()
+  return {
+    data: (data || []).map(normalizeTransactionRecord),
+    error,
+  }
 }
 
 export const updateTransaction = async (transactionId, transactionData) => {
-  // For demo admin, update in memory
-  if (transactionId.startsWith("demo-tx-")) {
-    for (const budget of demoBudgets) {
-      if (budget.transactions) {
-        const txIndex = budget.transactions.findIndex((tx) => tx.id === transactionId)
-        if (txIndex !== -1) {
-          budget.transactions[txIndex] = {
-            ...budget.transactions[txIndex],
-            name: transactionData.name,
-            amount: transactionData.amount,
-            budgeted_amount: transactionData.budgetedAmount,
-            category: transactionData.category,
-            type: transactionData.type,
-            date: transactionData.date,
-            receipt_url: transactionData.receipt,
-          }
-          return { data: [budget.transactions[txIndex]], error: null }
-        }
-      }
-    }
-    return { data: null, error: { message: "Transaction not found" } }
+  const updates = {
+    name: transactionData.name,
+    amount: transactionData.amount,
+    budgeted_amount: transactionData.budgetedAmount ?? null,
+    category: transactionData.category,
+    type: transactionData.type,
+    date: transactionData.date,
+    receipt_url: transactionData.receipt ?? null,
   }
+
+  if (transactionId.startsWith("demo-tx-")) {
+    const budget = demoBudgets().find((candidate) => (candidate.transactions || []).some((tx) => tx.id === transactionId))
+    if (!budget) {
+      return { data: null, error: { message: "Transaction not found" } }
+    }
+    budget.transactions = (budget.transactions || []).map((tx) => (tx.id === transactionId ? { ...tx, ...updates } : tx))
+    const updated = budget.transactions.find((tx) => tx.id === transactionId)
+    return { data: [normalizeTransactionRecord(updated)], error: null }
+  }
+
+  const filteredUpdates = Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined))
 
   const { data, error } = await supabase
     .from("transactions")
-    .update({
-      name: transactionData.name,
-      amount: transactionData.amount,
-      budgeted_amount: transactionData.budgetedAmount,
-      category: transactionData.category,
-      type: transactionData.type,
-      date: transactionData.date,
-      receipt_url: transactionData.receipt,
-    })
+    .update(filteredUpdates)
     .eq("id", transactionId)
     .select()
-  return { data, error }
+
+  return {
+    data: (data || []).map(normalizeTransactionRecord),
+    error,
+  }
 }
 
 export const deleteTransaction = async (transactionId) => {
-  // For demo admin, remove from memory
   if (transactionId.startsWith("demo-tx-")) {
-    for (const budget of demoBudgets) {
-      if (budget.transactions) {
-        budget.transactions = budget.transactions.filter((tx) => tx.id !== transactionId)
-      }
-    }
+    demoStore.budgets = demoStore.budgets.map((budget) => ({
+      ...budget,
+      transactions: (budget.transactions || []).filter((tx) => tx.id !== transactionId),
+    }))
     return { error: null }
   }
-
-  const { error } = await supabase.from("transactions").delete().eq("id", transactionId)
-  return { error }
+  return supabase.from("transactions").delete().eq("id", transactionId)
 }
 
 export const getUserCategories = async (userId) => {
-  // For demo admin, return in-memory categories
-  if (userId === DEMO_ADMIN.user.id) {
-    return { data: { categories: demoCategories }, error: null }
+  if (isDemoUser(userId)) {
+    return { data: { categories: cloneCategories(demoStore.categories) }, error: null }
   }
-
-  const { data, error } = await supabase.from("user_categories").select("*").eq("user_id", userId).single()
-  return { data, error }
+  return supabase.from("user_categories").select("*").eq("user_id", userId).single()
 }
 
 export const updateUserCategories = async (userId, categories) => {
-  // For demo admin, update in memory
-  if (userId === DEMO_ADMIN.user.id) {
-    demoCategories = categories
-    return { data: [{ categories: demoCategories }], error: null }
+  if (isDemoUser(userId)) {
+    demoStore.categories = cloneCategories(categories)
+    return { data: [{ categories: cloneCategories(demoStore.categories) }], error: null }
   }
 
-  const { data, error } = await supabase
+  return supabase
     .from("user_categories")
     .upsert([
       {
         user_id: userId,
-        categories: categories,
+        categories,
       },
     ])
     .select()
-  return { data, error }
 }
 
-const withGoalRelations = (goal) => ({
-  ...goal,
-  goal_contributions: (goal.goal_contributions || goal.contributions || []).sort(
-    (a, b) => new Date(b.contributed_at || b.date || b.created_at) - new Date(a.contributed_at || a.date || a.created_at),
-  ),
-})
-
 export const getGoals = async (userId) => {
-  if (userId === DEMO_ADMIN.user.id) {
-    const goalsWithRelations = demoGoals.map((goal) => ({
-      ...goal,
-      goal_contributions: demoGoalContributions
-        .filter((contribution) => contribution.goal_id === goal.id)
-        .sort((a, b) => new Date(b.contributed_at) - new Date(a.contributed_at)),
-    }))
-    return { data: goalsWithRelations, error: null }
+  if (isDemoUser(userId)) {
+    return {
+      data: demoStore.goals.map((goal) => selectGoalWithRelations(goal)),
+      error: null,
+    }
   }
 
   const { data, error } = await supabase
     .from("goals")
-    .select(`
-      *,
-      goal_contributions (*)
-    `)
+    .select(`*, goal_contributions (*)`)
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
 
-  return { data: data?.map(withGoalRelations) || [], error }
+  return {
+    data: (data || []).map((goal) => ({
+      ...normalizeGoal(goal),
+      goal_contributions: (goal.goal_contributions || []).sort(
+        (a, b) => new Date(b.contributed_at) - new Date(a.contributed_at),
+      ),
+    })),
+    error,
+  }
 }
 
 export const createGoal = async (userId, goalData) => {
@@ -438,24 +453,26 @@ export const createGoal = async (userId, goalData) => {
     created_at: new Date().toISOString(),
   }
 
-  if (userId === DEMO_ADMIN.user.id) {
-    const newGoal = {
-      ...payload,
-      id: `demo-goal-${Date.now()}`,
-    }
-    demoGoals = [newGoal, ...demoGoals]
-    return { data: [withGoalRelations(newGoal)], error: null }
+  if (isDemoUser(userId)) {
+    const goal = { ...payload, id: `demo-goal-${Date.now()}` }
+    demoStore.goals = [goal, ...demoStore.goals]
+    return { data: [selectGoalWithRelations(goal)], error: null }
   }
 
   const { data, error } = await supabase
     .from("goals")
     .insert([payload])
-    .select(`
-      *,
-      goal_contributions (*)
-    `)
+    .select(`*, goal_contributions (*)`)
 
-  return { data: data?.map(withGoalRelations) || [], error }
+  return {
+    data: (data || []).map((goal) => ({
+      ...normalizeGoal(goal),
+      goal_contributions: (goal.goal_contributions || []).sort(
+        (a, b) => new Date(b.contributed_at) - new Date(a.contributed_at),
+      ),
+    })),
+    error,
+  }
 }
 
 export const updateGoal = async (goalId, goalData) => {
@@ -469,17 +486,13 @@ export const updateGoal = async (goalId, goalData) => {
   }
 
   if (goalId.startsWith("demo-goal-")) {
-    const goalIndex = demoGoals.findIndex((goal) => goal.id === goalId)
-    if (goalIndex === -1) {
+    const index = demoStore.goals.findIndex((goal) => goal.id === goalId)
+    if (index === -1) {
       return { data: null, error: { message: "Goal not found" } }
     }
-
-    demoGoals[goalIndex] = {
-      ...demoGoals[goalIndex],
-      ...Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined)),
-    }
-
-    return { data: [withGoalRelations(demoGoals[goalIndex])], error: null }
+    const filtered = Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined))
+    demoStore.goals[index] = { ...demoStore.goals[index], ...filtered }
+    return { data: [selectGoalWithRelations(demoStore.goals[index])], error: null }
   }
 
   const filteredUpdates = Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined))
@@ -488,23 +501,26 @@ export const updateGoal = async (goalId, goalData) => {
     .from("goals")
     .update(filteredUpdates)
     .eq("id", goalId)
-    .select(`
-      *,
-      goal_contributions (*)
-    `)
+    .select(`*, goal_contributions (*)`)
 
-  return { data: data?.map(withGoalRelations) || [], error }
+  return {
+    data: (data || []).map((goal) => ({
+      ...normalizeGoal(goal),
+      goal_contributions: (goal.goal_contributions || []).sort(
+        (a, b) => new Date(b.contributed_at) - new Date(a.contributed_at),
+      ),
+    })),
+    error,
+  }
 }
 
 export const deleteGoal = async (goalId) => {
   if (goalId.startsWith("demo-goal-")) {
-    demoGoals = demoGoals.filter((goal) => goal.id !== goalId)
-    demoGoalContributions = demoGoalContributions.filter((contribution) => contribution.goal_id !== goalId)
+    demoStore.goals = demoStore.goals.filter((goal) => goal.id !== goalId)
+    demoStore.contributions = demoStore.contributions.filter((contribution) => contribution.goal_id !== goalId)
     return { error: null }
   }
-
-  const { error } = await supabase.from("goals").delete().eq("id", goalId)
-  return { error }
+  return supabase.from("goals").delete().eq("id", goalId)
 }
 
 export const addGoalContribution = async (goalId, contributionData) => {
@@ -517,12 +533,9 @@ export const addGoalContribution = async (goalId, contributionData) => {
   }
 
   if (goalId.startsWith("demo-goal-")) {
-    const newContribution = {
-      id: `demo-goal-contribution-${Date.now()}`,
-      ...payload,
-    }
-    demoGoalContributions = [newContribution, ...demoGoalContributions]
-    return { data: [newContribution], error: null }
+    const contribution = { ...payload, id: `demo-goal-contribution-${Date.now()}` }
+    demoStore.contributions = [contribution, ...demoStore.contributions]
+    return { data: [contribution], error: null }
   }
 
   const { data, error } = await supabase.from("goal_contributions").insert([payload]).select()
@@ -532,18 +545,16 @@ export const addGoalContribution = async (goalId, contributionData) => {
 export const getGoalContributions = async (goalId) => {
   if (goalId.startsWith("demo-goal-")) {
     return {
-      data: demoGoalContributions
+      data: demoStore.contributions
         .filter((contribution) => contribution.goal_id === goalId)
         .sort((a, b) => new Date(b.contributed_at) - new Date(a.contributed_at)),
       error: null,
     }
   }
 
-  const { data, error } = await supabase
+  return supabase
     .from("goal_contributions")
     .select("*")
     .eq("goal_id", goalId)
     .order("contributed_at", { ascending: false })
-
-  return { data, error }
 }
