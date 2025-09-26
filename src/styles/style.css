@@ -122,6 +122,409 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
+/* Cash burn analytics */
+.cashburn-entry-card {
+  margin: 1.5rem 0;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(124, 58, 237, 0.12));
+  border: 1px solid rgba(14, 165, 233, 0.15);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cashburn-entry-card__title {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.1rem;
+}
+
+.cashburn-entry-card__subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--gray-600);
+}
+
+.cashburn-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding-bottom: 3rem;
+}
+
+.cashburn-screen__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cashburn-screen__header h1 {
+  flex: 1;
+  text-align: center;
+  margin: 0;
+}
+
+.cashburn-loading {
+  background: white;
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.25rem;
+  box-shadow: var(--shadow-sm);
+  font-size: 0.95rem;
+}
+
+.cashburn-sponsor {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, var(--primary-500), var(--purple-600));
+  color: white;
+  box-shadow: var(--shadow-lg);
+}
+
+.cashburn-sponsor__eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  margin: 0 0 0.35rem 0;
+  opacity: 0.8;
+}
+
+.cashburn-nudges {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cashburn-nudges h2 {
+  margin: 0;
+}
+
+.cashburn-nudge {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: white;
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--gray-200);
+  box-shadow: var(--shadow-sm);
+}
+
+.cashburn-nudge.high {
+  border-color: var(--red-500);
+}
+
+.cashburn-nudge.medium {
+  border-color: var(--primary-500);
+}
+
+.cashburn-nudge__title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.cashburn-nudge__message {
+  margin: 0;
+  color: var(--gray-600);
+  font-size: 0.9rem;
+}
+
+.cashburn-nudge__actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.cashburn-reports {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cashburn-reports__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.cashburn-reports__header h2 {
+  margin: 0;
+}
+
+.cashburn-reports__subhead {
+  margin: 0;
+  color: var(--gray-600);
+  font-size: 0.9rem;
+}
+
+.cashburn-card {
+  background: white;
+  border-radius: var(--radius-xl);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cashburn-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cashburn-card__eyebrow {
+  margin: 0;
+  color: var(--gray-500);
+  font-size: 0.85rem;
+}
+
+.cashburn-card__body {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.cashburn-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 140px;
+}
+
+.cashburn-metric__label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gray-500);
+}
+
+.cashburn-metric__value {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.cashburn-metric__value.bad {
+  color: var(--red-600);
+}
+
+.cashburn-metric__value.good {
+  color: var(--green-600);
+}
+
+.cashburn-metric__percent {
+  margin-left: 0.25rem;
+  font-size: 0.8rem;
+  color: inherit;
+}
+
+.cashburn-leaks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cashburn-leak__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+}
+
+.cashburn-leak__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.cashburn-leak__delta.bad {
+  color: var(--red-600);
+}
+
+.cashburn-leak__delta.good {
+  color: var(--green-600);
+}
+
+.cashburn-leak__delta.neutral {
+  color: var(--gray-500);
+}
+
+.cashburn-sparkline {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 36px;
+}
+
+.cashburn-sparkline span {
+  width: 6px;
+  background: linear-gradient(180deg, var(--primary-500), var(--purple-600));
+  border-radius: var(--radius-sm);
+}
+
+.cashburn-card__narrative {
+  margin: 0;
+  color: var(--gray-600);
+  font-size: 0.9rem;
+}
+
+.cashburn-empty {
+  text-align: center;
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  background: var(--gray-100);
+  color: var(--gray-600);
+}
+
+.cashburn-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.cashburn-pill.danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--red-600);
+}
+
+.cashburn-pill.success {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--green-600);
+}
+
+.cashburn-pill.muted {
+  background: rgba(107, 114, 128, 0.12);
+  color: var(--gray-600);
+}
+
+.cashburn-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  padding: 1.5rem;
+  z-index: 1100;
+}
+
+.cashburn-sheet {
+  width: 100%;
+  max-width: 480px;
+  background: white;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+
+.cashburn-sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem 0.75rem;
+}
+
+.cashburn-sheet__header h2 {
+  margin: 0;
+}
+
+.cashburn-sheet__content {
+  padding: 0 1.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.cashburn-sheet__content section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cashburn-sheet__content h3 {
+  margin: 0;
+}
+
+.cashburn-sheet__hint {
+  margin: 0;
+  color: var(--gray-500);
+  font-size: 0.85rem;
+}
+
+.cashburn-sheet__footer {
+  padding: 1rem 1.5rem 1.5rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.cashburn-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.cashburn-chip {
+  border: 1px solid var(--gray-300);
+  background: white;
+  border-radius: var(--radius-full);
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cashburn-chip.active {
+  background: rgba(14, 165, 233, 0.15);
+  border-color: var(--primary-500);
+  color: var(--primary-700);
+  font-weight: 600;
+}
+
+.cashburn-quiet-hours {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.cashburn-quiet-hours label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.cashburn-thresholds {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.cashburn-thresholds label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
 /* PWA Standalone Mode Adjustments */
 @media (display-mode: standalone) {
   body {

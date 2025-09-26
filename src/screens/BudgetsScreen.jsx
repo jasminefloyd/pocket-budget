@@ -129,6 +129,16 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
         <p className="tagline">Manage your budgets and stay on top of your finances.</p>
       </div>
 
+      <section className="cashburn-entry-card">
+        <div>
+          <h2 className="cashburn-entry-card__title">Cash burn analytics</h2>
+          <p className="cashburn-entry-card__subtitle">Spot weekly leak categories, pace changes, and upcoming nudges.</p>
+        </div>
+        <button className="primary-button" onClick={() => setViewMode("cashBurn")} disabled={loading}>
+          View weekly report
+        </button>
+      </section>
+
       {budgets.length === 0 ? (
         <div className="empty-state">
           <p>Welcome to Pocket Budget! Create your first budget to get started.</p>

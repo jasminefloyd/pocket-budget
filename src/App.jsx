@@ -11,6 +11,7 @@ import LoginScreen from "./screens/LoginScreen"
 import LoadingScreen from "./components/LoadingScreen"
 import Header from "./components/Header"
 import InstallPrompt from "./components/InstallPrompt"
+import CashBurnScreen from "./screens/CashBurnScreen"
 
 function AppContent() {
   const { user, loading: authLoading, initializing } = useAuth()
@@ -138,6 +139,9 @@ function AppContent() {
           setBudgets={setBudgets}
           userId={user.id}
         />
+      )}
+      {viewMode === "cashBurn" && (
+        <CashBurnScreen userId={user.id} onClose={() => setViewMode("budgets")} categories={categories} />
       )}
       {viewMode === "details" && selectedBudget && (
         <BudgetDetailsScreen
