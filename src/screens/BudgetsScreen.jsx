@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { createBudget, updateBudget, deleteBudget } from "../lib/supabase"
+import { calculateBudgetPacing } from "../lib/pacing"
 
 export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode, setBudgets, userId }) {
   const [editingBudgetId, setEditingBudgetId] = useState(null)
@@ -138,6 +139,8 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
         </div>
       ) : (
         budgets.map((budget) => {
+          const pacing = calculateBudgetPacing(budget)
+          const overallPacing = pacing.overall
           const totalIncome = (budget.transactions || [])
             .filter((t) => t.type === "income")
             .reduce((sum, t) => sum + t.amount, 0)
@@ -157,10 +160,11 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
               .reduce((sum, t) => sum + t.amount, 0)
 
             const isOver = actual > cat.budgetedAmount
-            return { ...cat, actual, isOver }
+            const pacingKey = cat.category?.toLowerCase().trim() || ""
+            return { ...cat, actual, isOver, pacing: pacing.categoriesByName[pacingKey] }
           })
 
-          const isAnyCategoryOver = categorySummaries.some((cat) => cat.isOver)
+          const isAnyCategoryOver = categorySummaries.some((cat) => cat.isOver || cat.pacing?.status === "red")
 
           return (
             <div key={budget.id} className="budgetCard">
@@ -181,20 +185,32 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
                       disabled={loading}
                     />
                   ) : (
-                    <div
-                      className="budgetName"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setEditingBudgetId(budget.id)
-                        setBudgetNameInput(budget.name)
-                      }}
-                    >
-                      {budget.name}
-                      {isAnyCategoryOver && (
-                        <span className="expense" style={{ marginLeft: "0.5rem" }}>
-                          🚩
-                        </span>
-                      )}
+                    <div className="budgetNameRow">
+                      <div
+                        className="budgetName"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEditingBudgetId(budget.id)
+                          setBudgetNameInput(budget.name)
+                        }}
+                      >
+                        {budget.name}
+                        {isAnyCategoryOver && (
+                          <span className="expense" style={{ marginLeft: "0.5rem" }}>
+                            🚩
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className={`pacing-indicator pacing-${overallPacing.status}`}
+                        title={overallPacing.tooltip}
+                        role="status"
+                        aria-label={`Overall pacing is ${overallPacing.label}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="pacing-dot" aria-hidden="true" />
+                        <span className="pacing-label">{overallPacing.label}</span>
+                      </div>
                     </div>
                   )}
 
@@ -208,12 +224,26 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
                     <div className="category-budgets">
                       {categorySummaries.slice(0, 3).map((cat) => (
                         <div key={cat.category} className="category-budget-row">
-                          <div className="category-budget-name">
-                            {cat.category}
-                            {cat.isOver && (
-                              <span className="expense" style={{ marginLeft: "0.3rem" }}>
-                                ⚠
-                              </span>
+                          <div className="category-budget-header">
+                            <div className="category-budget-name">
+                              {cat.category}
+                              {cat.isOver && (
+                                <span className="expense" style={{ marginLeft: "0.3rem" }}>
+                                  ⚠
+                                </span>
+                              )}
+                            </div>
+                            {cat.pacing && (
+                              <div
+                                className={`pacing-indicator pacing-${cat.pacing.status}`}
+                                title={cat.pacing.tooltip}
+                                role="status"
+                                aria-label={`${cat.category} pacing is ${cat.pacing.label}`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <span className="pacing-dot" aria-hidden="true" />
+                                <span className="pacing-label">{cat.pacing.label}</span>
+                              </div>
                             )}
                           </div>
                           <div className="category-budget-amounts">
