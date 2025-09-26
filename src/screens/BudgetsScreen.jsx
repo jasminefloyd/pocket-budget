@@ -127,6 +127,9 @@ export default function BudgetsScreen({ budgets, setSelectedBudget, setViewMode,
     <div>
       <div className="header-section">
         <p className="tagline">Manage your budgets and stay on top of your finances.</p>
+        <div className="header-actions">
+          <button className="secondary-button" onClick={() => setViewMode("goals")}>View savings goals</button>
+        </div>
       </div>
 
       {budgets.length === 0 ? (

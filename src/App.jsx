@@ -7,6 +7,7 @@ import BudgetsScreen from "./screens/BudgetsScreen"
 import BudgetDetailsScreen from "./screens/BudgetDetailsScreen"
 import CategoriesScreen from "./screens/CategoriesScreen"
 import AIInsightsScreen from "./screens/AIInsightsScreen"
+import GoalsScreen from "./screens/GoalsScreen"
 import LoginScreen from "./screens/LoginScreen"
 import LoadingScreen from "./components/LoadingScreen"
 import Header from "./components/Header"
@@ -127,7 +128,7 @@ function AppContent() {
 
   return (
     <div className="container">
-      <Header title="Pocket Budget" showLogout={viewMode === "budgets"} />
+      <Header title="Pocket Budget" showLogout={viewMode !== "ai"} />
       <InstallPrompt />
 
       {viewMode === "budgets" && (
@@ -138,6 +139,9 @@ function AppContent() {
           setBudgets={setBudgets}
           userId={user.id}
         />
+      )}
+      {viewMode === "goals" && (
+        <GoalsScreen setViewMode={setViewMode} budgets={budgets} setBudgets={setBudgets} />
       )}
       {viewMode === "details" && selectedBudget && (
         <BudgetDetailsScreen
