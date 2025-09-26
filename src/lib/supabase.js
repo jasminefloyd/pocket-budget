@@ -18,17 +18,17 @@ export const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.m
 
 const storage = typeof window !== "undefined" ? window.localStorage : null
 
-const DEMO_ADMIN = {
-  id: "demo-admin-user-id",
+const FULLTEST_DEMO_ACCOUNT = {
+  id: "fulltest-demo-user-id",
   email: "fulltest@test.com",
-  password: "tester_full",
-  name: "Demo Admin",
+  password: "fullpass123",
+  name: "Full Test Demo",
 }
 
 const createDemoProfile = () => ({
-  id: DEMO_ADMIN.id,
-  email: DEMO_ADMIN.email,
-  full_name: DEMO_ADMIN.name,
+  id: FULLTEST_DEMO_ACCOUNT.id,
+  email: FULLTEST_DEMO_ACCOUNT.email,
+  full_name: FULLTEST_DEMO_ACCOUNT.name,
   created_at: new Date().toISOString(),
 })
 
@@ -68,9 +68,9 @@ const persistDemoSession = (session) => {
   demoStore.session = session
   if (storage) {
     if (session) {
-      storage.setItem("demo-admin-session", JSON.stringify(session))
+      storage.setItem("fulltest-demo-session", JSON.stringify(session))
     } else {
-      storage.removeItem("demo-admin-session")
+      storage.removeItem("fulltest-demo-session")
     }
   }
 }
@@ -79,7 +79,7 @@ const hydrateDemoSession = () => {
   if (demoStore.session) return demoStore.session
   if (!storage) return null
   try {
-    const raw = storage.getItem("demo-admin-session")
+    const raw = storage.getItem("fulltest-demo-session")
     if (!raw) return null
     const parsed = JSON.parse(raw)
     if (!parsed?.user) return null
@@ -92,23 +92,23 @@ const hydrateDemoSession = () => {
 }
 
 const demoUser = {
-  id: DEMO_ADMIN.id,
-  email: DEMO_ADMIN.email,
+  id: FULLTEST_DEMO_ACCOUNT.id,
+  email: FULLTEST_DEMO_ACCOUNT.email,
   user_metadata: {
-    full_name: DEMO_ADMIN.name,
+    full_name: FULLTEST_DEMO_ACCOUNT.name,
   },
   created_at: new Date().toISOString(),
 }
 
 const createDemoSession = () => ({
   user: demoUser,
-  access_token: "demo-admin-token",
-  refresh_token: "demo-admin-refresh",
+  access_token: "fulltest-demo-token",
+  refresh_token: "fulltest-demo-refresh",
   token_type: "bearer",
   expires_in: 3600,
 })
 
-const isDemoUser = (userId) => userId === DEMO_ADMIN.id
+const isDemoUser = (userId) => userId === FULLTEST_DEMO_ACCOUNT.id
 
 const ensureDemoBudgetShape = (budget) => ({
   ...budget,
@@ -135,14 +135,14 @@ const selectGoalWithRelations = (goal) => ({
 })
 
 export const signUp = async (email, password) => {
-  if (email === DEMO_ADMIN.email) {
+  if (email === FULLTEST_DEMO_ACCOUNT.email) {
     return signIn(email, password)
   }
   return supabase.auth.signUp({ email, password })
 }
 
 export const signIn = async (email, password) => {
-  if (email === DEMO_ADMIN.email && password === DEMO_ADMIN.password) {
+  if (email === FULLTEST_DEMO_ACCOUNT.email && password === FULLTEST_DEMO_ACCOUNT.password) {
     const session = createDemoSession()
     persistDemoSession(session)
     if (typeof window !== "undefined") {

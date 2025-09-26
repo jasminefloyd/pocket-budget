@@ -16,7 +16,7 @@ export default function LoginScreen() {
     setError("")
 
     try {
-      const { error: demoError } = await signIn("fulltest@test.com", "tester_full")
+      const { error: demoError } = await signIn("fulltest@test.com", "fullpass123")
       if (demoError) {
         setError(demoError.message || "Unable to start demo session")
       }
