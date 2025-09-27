@@ -378,14 +378,19 @@ export default function BudgetsScreen({
 
           // Category budget summaries
           const categorySummaries = (budget.categoryBudgets || []).map((cat) => {
+            const catCategory = typeof cat.category === "string" ? cat.category : ""
             const actual = (budget.transactions || [])
-              .filter(
-                (t) => t.type === "expense" && t.category.toLowerCase().trim() === cat.category.toLowerCase().trim(),
-              )
+              .filter((t) => {
+                const txCategory = typeof t.category === "string" ? t.category : ""
+                return (
+                  t.type === "expense" &&
+                  txCategory.toLowerCase().trim() === catCategory.toLowerCase().trim()
+                )
+              })
               .reduce((sum, t) => sum + t.amount, 0)
 
             const isOver = actual > cat.budgetedAmount
-            const pacingKey = cat.category?.toLowerCase().trim() || ""
+            const pacingKey = catCategory.toLowerCase().trim()
             return { ...cat, actual, isOver, pacing: pacing.categoriesByName[pacingKey] }
           })
 
