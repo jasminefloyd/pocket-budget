@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import PropTypes from "prop-types"
 import { signOut, updateUserProfile } from "../lib/supabase"
 import { useAuth } from "../contexts/AuthContext"
+import { persistPreferencesUpdate } from "./preferencesPersistence"
 
 const THEME_STORAGE_KEY = "pb:theme-preference"
 
@@ -105,6 +106,7 @@ export default function SettingsScreen({ user, categories, budgets, onManageCate
   const [preferencesStatus, setPreferencesStatus] = useState(null)
   const [preferencesError, setPreferencesError] = useState(null)
   const [utilityStatus, setUtilityStatus] = useState(null)
+  const pendingPreferencesRef = useRef(null)
   const { preference, effectiveTheme, setThemePreference, resetToSystem } = useThemePreference()
 
   useEffect(() => {
@@ -133,30 +135,19 @@ export default function SettingsScreen({ user, categories, budgets, onManageCate
   const preferencesDirty = useMemo(() => preferencesStatus === "saving", [preferencesStatus])
 
   const updatePreferences = async (updater) => {
-    if (!user?.id) return
-    setPreferencesStatus("saving")
-    setPreferencesError(null)
-    setUtilityStatus(null)
-    const nextPreferences = typeof updater === "function" ? updater(preferencesState) : updater
-    setPreferencesState(nextPreferences)
-    try {
-      const { data, error } = await updateUserProfile(user.id, { preferences: nextPreferences })
-      if (error) {
-        setPreferencesError(error.message || "Unable to save preferences")
-        setPreferencesStatus("error")
-        return
-      }
-      if (data) {
-        setUserProfile?.(data)
-      } else {
-        await refreshProfile?.()
-      }
-      setPreferencesStatus("saved")
-    } catch (error) {
-      console.error("Failed to update preferences", error)
-      setPreferencesError(error.message || "Unexpected error saving preferences")
-      setPreferencesStatus("error")
-    }
+    await persistPreferencesUpdate({
+      userId: user?.id,
+      updater,
+      getCurrentPreferences: () => preferencesState,
+      setPreferencesState,
+      setPreferencesStatus,
+      setPreferencesError,
+      setUtilityStatus,
+      updateUserProfileFn: updateUserProfile,
+      setUserProfile,
+      refreshProfile,
+      pendingRef: pendingPreferencesRef,
+    })
   }
 
   const handleProfileSubmit = async (event) => {
