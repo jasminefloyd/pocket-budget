@@ -72,6 +72,73 @@ const sanitizeCategories = (value) => {
   })
 }
 
+const BUDGET_CACHE_VERSION = 1
+const CATEGORY_CACHE_VERSION = 1
+
+const getBudgetCacheKey = (userId) => `pb:cache:budgets:${userId}`
+const getCategoryCacheKey = (userId) => `pb:cache:categories:${userId}`
+
+const safeJsonParse = (value) => {
+  if (!value) return null
+  try {
+    return JSON.parse(value)
+  } catch (error) {
+    console.warn("Failed to parse cached payload", error)
+    return null
+  }
+}
+
+const normalizeCachedTransaction = (transaction) => ({
+  id: transaction.id,
+  name: transaction.name || "",
+  amount: Number(transaction.amount || 0),
+  budgetedAmount: transaction.budgetedAmount ?? transaction.budgeted_amount ?? null,
+  category: transaction.category || "",
+  type: transaction.type === "income" ? "income" : "expense",
+  date: transaction.date || null,
+  receipt: transaction.receipt ?? transaction.receipt_url ?? null,
+})
+
+const normalizeCachedBudget = (budget) => ({
+  id: budget.id,
+  name: budget.name || "Untitled Budget",
+  createdAt: budget.createdAt || budget.created_at || new Date().toLocaleDateString(),
+  categoryBudgets: Array.isArray(budget.categoryBudgets || budget.category_budgets)
+    ? (budget.categoryBudgets || budget.category_budgets).map((category) => ({
+        category: category.category || "",
+        budgetedAmount: Number(category.budgetedAmount ?? category.budgeted_amount ?? 0),
+      }))
+    : [],
+  transactions: Array.isArray(budget.transactions)
+    ? budget.transactions.map((transaction) => normalizeCachedTransaction(transaction))
+    : [],
+  metadata: budget.metadata || null,
+})
+
+const extractCachedBudgets = (value) => {
+  if (!value) return []
+  const budgetsArray = Array.isArray(value?.budgets) ? value.budgets : Array.isArray(value) ? value : []
+  return budgetsArray
+    .filter((budget) => budget && typeof budget === "object" && budget.id)
+    .map((budget) => normalizeCachedBudget(budget))
+}
+
+const prepareBudgetsForCache = (budgets) =>
+  (budgets || [])
+    .filter((budget) => budget && typeof budget === "object" && budget.id)
+    .map((budget) => normalizeCachedBudget(budget))
+
+const extractCachedCategories = (value) => {
+  if (!value) return null
+  const payload = value.categories ?? value
+  return sanitizeCategories(payload)
+}
+
+const prepareCategoriesForCache = (categories) => {
+  const sanitized = sanitizeCategories(categories)
+  return sanitized ? cloneCategories(sanitized) : null
+}
+
 function AppContent() {
   const { user, loading: authLoading, initializing, status: authStatus } = useAuth()
   const [budgets, setBudgetsState] = useState([])
@@ -79,12 +146,37 @@ function AppContent() {
   const [selectedBudget, setSelectedBudget] = useState(null)
   const [viewMode, setViewMode] = useState("budgets")
   const [dataPhase, setDataPhase] = useState("idle")
+  const [cacheStatus, setCacheStatus] = useState({ budgets: false, categories: false })
   const lastFetchedUserIdRef = useRef(null)
+  const cacheStatusRef = useRef(cacheStatus)
+  const refreshTimerRef = useRef(null)
+  const budgetsCacheSnapshotRef = useRef("")
+  const categoriesCacheSnapshotRef = useRef("")
+  const hasCachedData = cacheStatus.budgets || cacheStatus.categories
+
+  useEffect(() => {
+    cacheStatusRef.current = cacheStatus
+  }, [cacheStatus])
 
   const shouldShowAuthLoading = initializing || authLoading || authStatus === "auth-transition"
   const markDataAsStale = useCallback(() => {
     if (!user?.id) return
-    lastFetchedUserIdRef.current = null
+    if (refreshTimerRef.current) return
+
+    const hasCache = cacheStatusRef.current.budgets || cacheStatusRef.current.categories
+    const delay = hasCache ? 200 : 0
+
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null
+      lastFetchedUserIdRef.current = null
+      const latestHasCache = cacheStatusRef.current.budgets || cacheStatusRef.current.categories
+      setDataPhase((previous) => {
+        if (!latestHasCache && previous === "loading") {
+          return previous
+        }
+        return latestHasCache ? "refreshing" : "loading"
+      })
+    }, delay)
   }, [user?.id])
 
   const applyMetadata = useCallback((budget, metadataOverride) => {
@@ -135,8 +227,146 @@ function AppContent() {
       setViewMode("budgets")
       setDataPhase("idle")
       lastFetchedUserIdRef.current = null
+      budgetsCacheSnapshotRef.current = ""
+      categoriesCacheSnapshotRef.current = ""
+      cacheStatusRef.current = { budgets: false, categories: false }
+      setCacheStatus({ budgets: false, categories: false })
     }
   }, [user, setBudgets])
+
+  useEffect(() => {
+    if (!user?.id) return
+    if (typeof window === "undefined") return
+
+    let budgetsFound = false
+    let categoriesFound = false
+
+    try {
+      const rawBudgets = window.localStorage.getItem(getBudgetCacheKey(user.id))
+      const parsedBudgets = safeJsonParse(rawBudgets)
+      const cachedBudgets = extractCachedBudgets(parsedBudgets)
+      if (cachedBudgets.length > 0) {
+        budgetsFound = true
+        budgetsCacheSnapshotRef.current = JSON.stringify(cachedBudgets)
+        setBudgets(cachedBudgets)
+        setSelectedBudget((current) => {
+          if (current && cachedBudgets.some((budget) => budget.id === current.id)) {
+            return current
+          }
+          return cachedBudgets[0] || current
+        })
+      } else {
+        budgetsCacheSnapshotRef.current = ""
+      }
+    } catch (error) {
+      console.warn("Failed to restore cached budgets", error)
+      budgetsCacheSnapshotRef.current = ""
+    }
+
+    try {
+      const rawCategories = window.localStorage.getItem(getCategoryCacheKey(user.id))
+      const parsedCategories = safeJsonParse(rawCategories)
+      const cachedCategories = extractCachedCategories(parsedCategories)
+      if (cachedCategories) {
+        categoriesFound = true
+        categoriesCacheSnapshotRef.current = JSON.stringify(cachedCategories)
+        setCategories(cachedCategories)
+      } else {
+        categoriesCacheSnapshotRef.current = ""
+      }
+    } catch (error) {
+      console.warn("Failed to restore cached categories", error)
+      categoriesCacheSnapshotRef.current = ""
+    }
+
+    if (budgetsFound || categoriesFound) {
+      setDataPhase((prev) => (prev === "idle" ? "hydrated" : prev))
+    }
+
+    setCacheStatus((prev) => {
+      const next = { budgets: budgetsFound, categories: categoriesFound }
+      if (prev.budgets === next.budgets && prev.categories === next.categories) {
+        return prev
+      }
+      return next
+    })
+  }, [user?.id, setBudgets, setSelectedBudget])
+
+  useEffect(
+    () => () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current)
+      }
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (!user?.id) return
+    if (typeof window === "undefined") return
+    if (dataPhase === "idle") return
+
+    const payload = prepareBudgetsForCache(budgets)
+    const serialized = JSON.stringify(payload)
+
+    if (serialized !== budgetsCacheSnapshotRef.current) {
+      budgetsCacheSnapshotRef.current = serialized
+      try {
+        window.localStorage.setItem(
+          getBudgetCacheKey(user.id),
+          JSON.stringify({
+            version: BUDGET_CACHE_VERSION,
+            savedAt: Date.now(),
+            budgets: payload,
+          }),
+        )
+      } catch (error) {
+        console.warn("Failed to persist budgets cache", error)
+      }
+    }
+
+    setCacheStatus((prev) => {
+      const hasBudgets = payload.length > 0
+      if (prev.budgets === hasBudgets) {
+        return prev
+      }
+      return { ...prev, budgets: hasBudgets }
+    })
+  }, [budgets, user?.id, dataPhase])
+
+  useEffect(() => {
+    if (!user?.id) return
+    if (typeof window === "undefined") return
+    if (dataPhase === "idle") return
+
+    const payload = prepareCategoriesForCache(categories)
+    if (!payload) return
+
+    const serialized = JSON.stringify(payload)
+
+    if (serialized !== categoriesCacheSnapshotRef.current) {
+      categoriesCacheSnapshotRef.current = serialized
+      try {
+        window.localStorage.setItem(
+          getCategoryCacheKey(user.id),
+          JSON.stringify({
+            version: CATEGORY_CACHE_VERSION,
+            savedAt: Date.now(),
+            categories: payload,
+          }),
+        )
+      } catch (error) {
+        console.warn("Failed to persist categories cache", error)
+      }
+    }
+
+    setCacheStatus((prev) => {
+      if (prev.categories) {
+        return prev
+      }
+      return { ...prev, categories: true }
+    })
+  }, [categories, user?.id, dataPhase])
 
   useEffect(() => {
     if (!user || authLoading || initializing) {
@@ -150,7 +380,7 @@ function AppContent() {
     const currentUserId = user.id
     lastFetchedUserIdRef.current = currentUserId
     let isCurrent = true
-    setDataPhase("loading")
+    setDataPhase(hasCachedData ? "refreshing" : "loading")
 
     const fetchBudgets = getBudgets(currentUserId)
     const fetchCategories = getUserCategories(currentUserId)
@@ -183,7 +413,7 @@ function AppContent() {
             receipt: tx.receipt_url ?? null,
           })),
         }))
-        setBudgets(normalizedBudgets.map((budget) => applyMetadata(budget)))
+        setBudgets(normalizedBudgets)
       } else {
         console.error("Unexpected error resolving budgets:", budgetResult.reason)
         encounteredError = true
@@ -221,7 +451,7 @@ function AppContent() {
     return () => {
       isCurrent = false
     }
-  }, [user, authLoading, initializing, setBudgets, applyMetadata])
+  }, [user, authLoading, initializing, setBudgets, hasCachedData])
 
   const updateCategories = async (nextCategories) => {
     const validatedCategories = sanitizeCategories(nextCategories)
@@ -332,7 +562,11 @@ function AppContent() {
     return <LoadingScreen message="Preparing your experience" />
   }
 
-  if (user && dataPhase !== "ready") {
+  const isBudgetDataPending = user && dataPhase !== "ready" && budgets.length === 0
+  const shouldBlockForData =
+    user && !hasCachedData && (dataPhase === "idle" || dataPhase === "loading")
+
+  if (shouldBlockForData) {
     return <LoadingScreen message={dataPhase === "loading" ? "Loading your budgets" : "Setting things up"} />
   }
 
@@ -351,6 +585,7 @@ function AppContent() {
           onMetadataChange={handleBudgetMetadataUpdate}
           onMetadataRemove={handleBudgetMetadataRemoval}
           onDataMutated={markDataAsStale}
+          isLoadingBudgets={isBudgetDataPending}
         />
       )}
 
