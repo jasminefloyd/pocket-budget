@@ -5,6 +5,7 @@ import { generateAIInsight, getAIInsights } from "../lib/supabase"
 
 export default function AIInsightsScreen({ budget, setViewMode }) {
   const { user } = useAuth()
+  const userId = user?.id
 
   const [history, setHistory] = useState([])
   const [selectedId, setSelectedId] = useState(null)
@@ -14,36 +15,54 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
 
   const calculateMetrics = useCallback(() => {
     const transactions = budget.transactions || []
-    const totalIncome = transactions.filter((t) => t.type === "income").reduce((sum, t) => sum + t.amount, 0)
-    const totalExpenses = transactions.filter((t) => t.type === "expense").reduce((sum, t) => sum + t.amount, 0)
+
+    const toAmount = (value) => {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return value
+      }
+      const parsed = Number.parseFloat(value)
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+
+    const sumByType = (type) =>
+      transactions
+        .filter((transaction) => transaction.type === type)
+        .reduce((sum, transaction) => sum + toAmount(transaction.amount), 0)
+
+    const totalIncome = sumByType("income")
+    const totalExpenses = sumByType("expense")
     const balance = totalIncome - totalExpenses
     const savingsRate = totalIncome > 0 ? (balance / totalIncome) * 100 : 0
 
     const expensesByCategory = {}
     transactions
-      .filter((t) => t.type === "expense")
-      .forEach((t) => {
-        expensesByCategory[t.category] = (expensesByCategory[t.category] || 0) + t.amount
+      .filter((transaction) => transaction.type === "expense")
+      .forEach((transaction) => {
+        const amount = toAmount(transaction.amount)
+        const categoryKey = transaction.category?.trim() || "Uncategorized"
+        expensesByCategory[categoryKey] = (expensesByCategory[categoryKey] || 0) + amount
       })
 
     const topExpenseCategory = Object.entries(expensesByCategory).sort(([, a], [, b]) => b - a)[0]
 
     const now = new Date()
-    const last7Days = transactions
-      .filter((t) => {
-        const txDate = new Date(t.date)
-        const daysDiff = (now - txDate) / (1000 * 60 * 60 * 24)
-        return daysDiff <= 7 && t.type === "expense"
-      })
-      .reduce((sum, t) => sum + t.amount, 0)
+    const sumExpensesInRange = (minDaysInclusive, maxDaysExclusive) =>
+      transactions
+        .filter((transaction) => {
+          if (transaction.type !== "expense") return false
+          const txDate = new Date(transaction.date)
+          if (Number.isNaN(txDate.getTime())) return false
+          const daysDiff = (now - txDate) / (1000 * 60 * 60 * 24)
+          return daysDiff >= minDaysInclusive && daysDiff < maxDaysExclusive
+        })
+        .reduce((sum, transaction) => sum + toAmount(transaction.amount), 0)
 
-    const previous7Days = transactions
-      .filter((t) => {
-        const txDate = new Date(t.date)
-        const daysDiff = (now - txDate) / (1000 * 60 * 60 * 24)
-        return daysDiff > 7 && daysDiff <= 14 && t.type === "expense"
-      })
-      .reduce((sum, t) => sum + t.amount, 0)
+    const last7Days = sumExpensesInRange(0, 7)
+    const previous7Days = sumExpensesInRange(7, 14)
+    const totalTransactionVolume = transactions.reduce(
+      (sum, transaction) => sum + Math.abs(toAmount(transaction.amount)),
+      0,
+    )
 
     return {
       totalIncome,
@@ -55,7 +74,7 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
       last7Days,
       previous7Days,
       transactionCount: transactions.length,
-      avgTransactionAmount: transactions.length > 0 ? (totalIncome + totalExpenses) / transactions.length : 0,
+      avgTransactionAmount: transactions.length > 0 ? totalTransactionVolume / transactions.length : 0,
     }
   }, [budget])
 
@@ -80,10 +99,10 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
   )
 
   const loadInsights = useCallback(async () => {
-    if (!user) return
+    if (!userId) return
     setLoading(true)
     try {
-      const { data, error: fetchError } = await getAIInsights(user.id, budget.id, { limit: 10 })
+      const { data, error: fetchError } = await getAIInsights(userId, budget.id, { limit: 10 })
       if (fetchError) {
         console.error("Failed to load AI insights", fetchError)
         setError(fetchError.message || "Unable to load AI insights")
@@ -109,20 +128,20 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
     } finally {
       setLoading(false)
     }
-  }, [user, budget.id])
+  }, [userId, budget.id])
 
   useEffect(() => {
     loadInsights()
   }, [loadInsights])
 
   const handleGenerate = useCallback(async () => {
-    if (!user) return
+    if (!userId) return
     setGenerating(true)
     setError(null)
     try {
       const metrics = calculateMetrics()
       const { data, error: invokeError } = await generateAIInsight({
-        userId: user.id,
+        userId,
         budgetId: budget.id,
         metrics,
       })
@@ -147,7 +166,7 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
       setGenerating(false)
       setLoading(false)
     }
-  }, [user, budget.id, calculateMetrics, isPaidTier])
+  }, [userId, budget.id, calculateMetrics])
 
   if (loading && !history.length) {
     return (
