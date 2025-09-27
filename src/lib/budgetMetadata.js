@@ -36,10 +36,6 @@ export const createDefaultBudgetMetadata = () => {
       lastEditedAt: null,
     },
     changeLog: [],
-    ads: {
-      enabled: true,
-      lastSeen: null,
-    },
     insights: {
       trackedCategories: [],
       reportSchedule: {

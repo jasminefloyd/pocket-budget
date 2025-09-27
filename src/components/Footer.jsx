@@ -2,7 +2,6 @@ import PropTypes from "prop-types"
 
 const NAV_ITEMS = [
   { key: "home", label: "Home", icon: "🏠" },
-  { key: "budgets", label: "Budgets", icon: "💼" },
   { key: "goals", label: "Goals", icon: "🎯" },
   { key: "reports", label: "Reports", icon: "📊" },
   { key: "settings", label: "Settings", icon: "⚙️" },
@@ -10,7 +9,6 @@ const NAV_ITEMS = [
 
 const keyToViewMode = {
   home: "budgets",
-  budgets: "budgets",
   goals: "goals",
   reports: "ai",
   settings: "settings",
@@ -23,7 +21,7 @@ const getActiveKey = (viewMode) => {
     case "budgets":
     case "details":
     case "categories":
-      return "budgets"
+      return "home"
     case "goals":
       return "goals"
     case "ai":

@@ -6,11 +6,10 @@ import { createTransaction, updateTransaction, updateBudget, getCashBurn } from 
 import { calculateBudgetPacing } from "../lib/pacing"
 import { useAuth } from "../contexts/AuthContext"
 
-const PAID_PLAN_TIERS = ["trial", "paid", "pro", "premium", "plus"]
 const CYCLE_OPTIONS = [
-  { type: "monthly", label: "Monthly", requiresPaid: false },
-  { type: "per-paycheck", label: "Per-paycheck", requiresPaid: true },
-  { type: "custom", label: "Custom", requiresPaid: true },
+  { type: "monthly", label: "Monthly" },
+  { type: "per-paycheck", label: "Per-paycheck" },
+  { type: "custom", label: "Custom" },
 ]
 
 const getCycleLabel = (type) => {
@@ -82,7 +81,7 @@ const formatTransactionDate = (isoDate) => {
   return parsed.toLocaleDateString()
 }
 
-export default function BudgetDetailsScreen({
+function BudgetDetailsScreen({
   budget,
   categories,
   setViewMode,
@@ -92,10 +91,7 @@ export default function BudgetDetailsScreen({
   onMetadataChange,
   onDataMutated,
 }) {
-  const { user, userProfile } = useAuth()
-  const planTier = userProfile?.plan_tier || userProfile?.planTier || "free"
-  const hasAdvancedStructures = PAID_PLAN_TIERS.includes(String(planTier).toLowerCase())
-  const isFreePlan = !hasAdvancedStructures
+  const { user } = useAuth()
   const metadata = useMemo(() => budget.metadata || {}, [budget.metadata])
   const insightsPreferences = useMemo(
     () => budget.insightsPreferences || metadata.insights || {},
@@ -573,7 +569,7 @@ export default function BudgetDetailsScreen({
   )
 
   useEffect(() => {
-    if (!hasAdvancedStructures || !nudgeConfig.enabled) return
+    if (!nudgeConfig.enabled) return
     if (isWithinQuietHours(new Date())) return
     const snoozedUntil = metadata.insights?.nudges?.snoozedUntil
     if (snoozedUntil && new Date(snoozedUntil) > new Date()) return
@@ -600,7 +596,6 @@ export default function BudgetDetailsScreen({
       })
     }
     }, [
-      hasAdvancedStructures,
       nudgeConfig,
       metadata.insights,
       budget.cycleMetadata,
@@ -1460,61 +1455,47 @@ export default function BudgetDetailsScreen({
           </div>
         )}
 
-        {isFreePlan ? (
-          <>
-            <div className="plan-teaser">
-              Upgrade or start a trial to unlock leak alerts, trend graphs, and burn pacing recommendations.
-            </div>
-            {budget.adsEnabled && (
-              <div className="budget-ad-unit" role="note" aria-label="Sponsored offer">
-                <div className="budget-ad-badge">Sponsored</div>
-                <div className="budget-ad-copy">Lower recurring bills with Pocket Partner Energy — average savings $18/mo.</div>
+        <div className="cashburn-card-grid">
+          {weeklyReport.topCards.length === 0 && (
+            <div className="empty-state small">Track spending this week to unlock leak insights.</div>
+          )}
+          {weeklyReport.topCards.map((card) => (
+            <button
+              type="button"
+              key={card.category}
+              className={`cashburn-card pacing-${card.status}`}
+              onClick={() => setExpandedLeak((current) => (current === card.category ? null : card.category))}
+            >
+              <div className="cashburn-card-header">
+                <span className="cashburn-category">{card.category}</span>
+                <div className={`pacing-indicator pacing-${card.status}`}>
+                  <span className="pacing-dot" aria-hidden="true" />
+                  <span className="pacing-label">{card.statusLabel}</span>
+                </div>
               </div>
-            )}
-          </>
-        ) : (
-          <>
-            <div className="cashburn-card-grid">
-              {weeklyReport.topCards.length === 0 && (
-                <div className="empty-state small">Track spending this week to unlock leak insights.</div>
+              <div className="cashburn-amount-row">
+                <span className="cashburn-amount">{formatCurrency(card.current)}</span>
+                <span className={`cashburn-delta ${card.delta >= 0 ? "expense" : "income"}`}>
+                  {card.delta >= 0 ? "+" : "-"}${Math.abs(card.delta).toFixed(2)} vs last week
+                </span>
+              </div>
+              <div className="cashburn-change">Change {card.pctChange.toFixed(0)}%</div>
+              {expandedLeak === card.category && (
+                <div className="cashburn-trend">
+                  <div className="sparkline">{toSparkline(weeklyReport.trends[card.category])}</div>
+                  <div className="sparkline-label">Last 6 weeks</div>
+                </div>
               )}
-              {weeklyReport.topCards.map((card) => (
-                <button
-                  type="button"
-                  key={card.category}
-                  className={`cashburn-card pacing-${card.status}`}
-                  onClick={() => setExpandedLeak((current) => (current === card.category ? null : card.category))}
-                >
-                  <div className="cashburn-card-header">
-                    <span className="cashburn-category">{card.category}</span>
-                    <div className={`pacing-indicator pacing-${card.status}`}>
-                      <span className="pacing-dot" aria-hidden="true" />
-                      <span className="pacing-label">{card.statusLabel}</span>
-                    </div>
-                  </div>
-                  <div className="cashburn-amount-row">
-                    <span className="cashburn-amount">{formatCurrency(card.current)}</span>
-                    <span className={`cashburn-delta ${card.delta >= 0 ? "expense" : "income"}`}>
-                      {card.delta >= 0 ? "+" : "-"}${Math.abs(card.delta).toFixed(2)} vs last week
-                    </span>
-                  </div>
-                  <div className="cashburn-change">Change {card.pctChange.toFixed(0)}%</div>
-                  {expandedLeak === card.category && (
-                    <div className="cashburn-trend">
-                      <div className="sparkline">{toSparkline(weeklyReport.trends[card.category])}</div>
-                      <div className="sparkline-label">Last 6 weeks</div>
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
+            </button>
+          ))}
+        </div>
 
-            <div className="cashburn-settings">
-              <div className="settings-row">
-                <label>Report schedule</label>
-                <div className="settings-inputs">
-                  <select value={reportSchedule.day} onChange={(e) => handleReportScheduleChange("day", e.target.value)}>
-                    {Object.keys(DAY_INDEX).map((day) => (
+        <div className="cashburn-settings">
+          <div className="settings-row">
+            <label>Report schedule</label>
+            <div className="settings-inputs">
+              <select value={reportSchedule.day} onChange={(e) => handleReportScheduleChange("day", e.target.value)}>
+                {Object.keys(DAY_INDEX).map((day) => (
                   <option key={day} value={day}>
                     {day.charAt(0).toUpperCase() + day.slice(1)}
                   </option>
@@ -1550,55 +1531,49 @@ export default function BudgetDetailsScreen({
 
           <div className="settings-row">
             <label>Real-time nudges</label>
-            {hasAdvancedStructures ? (
-              <div className="nudge-config">
-                <label className="checkbox-row">
+            <div className="nudge-config">
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={nudgeConfig.enabled}
+                  onChange={(e) => handleNudgeConfigChange({ enabled: e.target.checked })}
+                />
+                <span>Notify me when a category hits {Math.round((Number(nudgeConfig.threshold) || 0.8) * 100)}% of budget</span>
+              </label>
+              <div className="nudge-threshold">
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1"
+                  step="0.05"
+                  value={Number(nudgeConfig.threshold) || 0.8}
+                  onChange={(e) => handleNudgeConfigChange({ threshold: Number(e.target.value) })}
+                />
+                <span>{Math.round((Number(nudgeConfig.threshold) || 0.8) * 100)}%</span>
+              </div>
+              <div className="quiet-hours-controls">
+                <span>Quiet hours</span>
+                <div className="settings-inputs">
                   <input
-                    type="checkbox"
-                    checked={nudgeConfig.enabled}
-                    onChange={(e) => handleNudgeConfigChange({ enabled: e.target.checked })}
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={quietHoursStart}
+                    onChange={(e) => handleNudgeConfigChange({ quietStart: Number(e.target.value) })}
                   />
-                  <span>Notify me when a category hits {Math.round((Number(nudgeConfig.threshold) || 0.8) * 100)}% of budget</span>
-                </label>
-                <div className="nudge-threshold">
+                  <span>to</span>
                   <input
-                    type="range"
-                    min="0.5"
-                    max="1"
-                    step="0.05"
-                    value={Number(nudgeConfig.threshold) || 0.8}
-                    onChange={(e) => handleNudgeConfigChange({ threshold: Number(e.target.value) })}
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={quietHoursEnd}
+                    onChange={(e) => handleNudgeConfigChange({ quietEnd: Number(e.target.value) })}
                   />
-                  <span>{Math.round((Number(nudgeConfig.threshold) || 0.8) * 100)}%</span>
-                </div>
-                <div className="quiet-hours-controls">
-                  <span>Quiet hours</span>
-                  <div className="settings-inputs">
-                    <input
-                      type="number"
-                      min="0"
-                      max="23"
-                      value={quietHoursStart}
-                      onChange={(e) => handleNudgeConfigChange({ quietStart: Number(e.target.value) })}
-                    />
-                    <span>to</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="23"
-                      value={quietHoursEnd}
-                      onChange={(e) => handleNudgeConfigChange({ quietEnd: Number(e.target.value) })}
-                    />
-                  </div>
                 </div>
               </div>
-            ) : (
-              <div className="plan-teaser">Upgrade or start a trial to unlock real-time nudges and advanced budgeting cycles.</div>
-            )}
+            </div>
           </div>
         </div>
-      </>
-      )}
       </div>
 
       {/* Transaction Tabs and List */}
@@ -1859,26 +1834,16 @@ export default function BudgetDetailsScreen({
             <h3 className="header modal-header">Edit cycle</h3>
             <div className="cycle-option-grid">
               {CYCLE_OPTIONS.map((option) => {
-                const disabled = option.requiresPaid && !hasAdvancedStructures
                 const selected = cycleDraft.type === option.type
                 return (
                   <button
                     key={option.type}
                     type="button"
-                    className={`cycle-option ${selected ? "selected" : ""} ${disabled ? "locked" : ""}`}
-                    onClick={() => {
-                      if (disabled) return
-                      setCycleDraft((prev) => ({ ...prev, type: option.type }))
-                    }}
-                    disabled={disabled}
+                    className={`cycle-option ${selected ? "selected" : ""}`}
+                    onClick={() => setCycleDraft((prev) => ({ ...prev, type: option.type }))}
                   >
-                    <div className="cycle-option-title">
-                      {option.label}
-                      {disabled && <span className="lock-icon">🔒</span>}
-                    </div>
-                    <div className="cycle-option-description">
-                      {option.requiresPaid ? "Requires trial or paid" : "Included in Free"}
-                    </div>
+                    <div className="cycle-option-title">{option.label}</div>
+                    <div className="cycle-option-description">Choose the cadence that fits this budget.</div>
                   </button>
                 )
               })}
@@ -1927,14 +1892,10 @@ export default function BudgetDetailsScreen({
                 onChange={(e) => setCycleDraft((prev) => ({ ...prev, startDate: e.target.value }))}
               />
             </div>
-            {!hasAdvancedStructures && (
-              <p className="plan-teaser">Upgrade or begin a trial to use paycheck and custom budgeting cycles.</p>
-            )}
             <div className="modal-actions">
               <button
                 className="addButton primary-button"
                 onClick={handleCycleSave}
-                disabled={!hasAdvancedStructures && cycleDraft.type !== "monthly"}
               >
                 Save cycle
               </button>
@@ -2045,7 +2006,6 @@ BudgetDetailsScreen.propTypes = {
       lengthDays: PropTypes.number,
       cycleLength: PropTypes.number,
     }),
-    adsEnabled: PropTypes.bool,
     createdAt: PropTypes.string,
   }).isRequired,
   categories: PropTypes.shape({
@@ -2070,3 +2030,5 @@ BudgetDetailsScreen.defaultProps = {
   onMetadataChange: undefined,
   onDataMutated: undefined,
 }
+
+export default BudgetDetailsScreen

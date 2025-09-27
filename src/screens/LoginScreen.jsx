@@ -11,23 +11,6 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
-  const handleDemoLogin = async () => {
-    setLoading(true)
-    setError("")
-
-    try {
-      const { error: demoError } = await signIn("fulltest@test.com", "fullpass123")
-      if (demoError) {
-        setError(demoError.message || "Unable to start demo session")
-      }
-    } catch (demoUnexpected) {
-      console.error("Demo login error:", demoUnexpected)
-      setError("Demo login failed. Please try again.")
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleEmailAuth = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -99,20 +82,6 @@ export default function LoginScreen() {
 
         <div className="login-form-container">
           {error && <div className="error-message">{error}</div>}
-
-          <button
-            onClick={handleDemoLogin}
-            className="google-button"
-            style={{
-              background: "linear-gradient(135deg, #0ea5e9, #8b5cf6)",
-              color: "white",
-              border: "none",
-              marginBottom: "1rem",
-            }}
-            disabled={loading}
-          >
-            🎯 Demo Login (fulltest@test.com)
-          </button>
 
           <form onSubmit={handleEmailAuth} className="login-form">
             <input

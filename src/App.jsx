@@ -8,6 +8,7 @@ import BudgetDetailsScreen from "./screens/BudgetDetailsScreen"
 import CategoriesScreen from "./screens/CategoriesScreen"
 import GoalsScreen from "./screens/GoalsScreen"
 import AIInsightsScreen from "./screens/AIInsightsScreen"
+import SettingsScreen from "./screens/SettingsScreen"
 import LoadingScreen from "./components/LoadingScreen"
 import LoginScreen from "./screens/LoginScreen"
 import Header from "./components/Header"
@@ -66,7 +67,6 @@ function AppContent() {
       ...defaults,
       ...metadata,
       cycle: { ...defaults.cycle, ...(metadata?.cycle || {}) },
-      ads: { ...defaults.ads, ...(metadata?.ads || {}) },
       insights: {
         ...defaults.insights,
         ...(metadata?.insights || {}),
@@ -83,7 +83,6 @@ function AppContent() {
       metadata: safeMetadata,
       cycleMetadata: safeMetadata.cycle,
       changeLog: safeMetadata.changeLog || [],
-      adsEnabled: safeMetadata.ads?.enabled !== false,
       insightsPreferences: safeMetadata.insights,
       dismissedInsights: safeMetadata.dismissals,
     }
@@ -238,6 +237,29 @@ function AppContent() {
     [budgets, selectedBudget],
   )
 
+  useEffect(() => {
+    if ((viewMode === "details" || viewMode === "ai") && !activeBudget) {
+      if (budgets.length > 0) {
+        setSelectedBudget(budgets[0])
+      } else if (viewMode !== "budgets") {
+        setViewMode("budgets")
+      }
+    }
+  }, [viewMode, activeBudget, budgets, setSelectedBudget])
+
+  useEffect(() => {
+    if (!selectedBudget?.id) return
+    const stillExists = budgets.some((budget) => budget.id === selectedBudget.id)
+    if (!stillExists) {
+      if (budgets.length > 0) {
+        setSelectedBudget(budgets[0])
+      } else {
+        setSelectedBudget(null)
+        setViewMode("budgets")
+      }
+    }
+  }, [budgets, selectedBudget, setSelectedBudget, setViewMode])
+
   if (initializing) {
     return <LoadingScreen message="Checking your account" />
   }
@@ -299,6 +321,13 @@ function AppContent() {
         />
       )}
 
+      {viewMode === "details" && !activeBudget && budgets.length === 0 && (
+        <div className="empty-state">
+          <p>Create a budget to see its details.</p>
+          <button className="primary-button" onClick={() => setViewMode("budgets")}>Go to Home</button>
+        </div>
+      )}
+
       {viewMode === "categories" && (
         <CategoriesScreen
           categories={categories}
@@ -307,7 +336,23 @@ function AppContent() {
           setViewMode={setViewMode}
         />
       )}
+
       {viewMode === "ai" && activeBudget && <AIInsightsScreen budget={activeBudget} setViewMode={setViewMode} />}
+
+      {viewMode === "ai" && !activeBudget && (
+        <div className="empty-state">
+          <p>Select a budget to generate a report.</p>
+          <button className="primary-button" onClick={() => setViewMode("budgets")}>Browse budgets</button>
+        </div>
+      )}
+
+      {viewMode === "settings" && (
+        <SettingsScreen
+          user={user}
+          categories={categories}
+          onManageCategories={() => setViewMode("categories")}
+        />
+      )}
 
       <Footer viewMode={viewMode} setViewMode={setViewMode} />
     </div>
