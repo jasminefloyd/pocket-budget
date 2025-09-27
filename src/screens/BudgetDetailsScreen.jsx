@@ -169,6 +169,16 @@ function BudgetDetailsScreen({
     [budget, transactions],
   )
 
+  const resolvedCategories = useMemo(
+    () => ({
+      income: Array.isArray(categories?.income) ? categories.income : [],
+      expense: Array.isArray(categories?.expense) ? categories.expense : [],
+    }),
+    [categories],
+  )
+
+  const expenseCategories = resolvedCategories.expense
+
   useEffect(() => {
     setAllocationDraft((budget.categoryBudgets || []).map((entry) => ({ ...entry })))
     setAllocationDirty(false)
@@ -469,9 +479,13 @@ function BudgetDetailsScreen({
 
   const availableCategories = useMemo(() => {
     const registry = new Set((budget.categoryBudgets || []).map((entry) => entry.category))
-    ;(categories.expense || []).forEach((cat) => registry.add(cat.name))
+    expenseCategories.forEach((cat) => {
+      if (cat?.name) {
+        registry.add(cat.name)
+      }
+    })
     return Array.from(registry).sort((a, b) => a.localeCompare(b))
-  }, [budget.categoryBudgets, categories.expense])
+  }, [budget.categoryBudgets, expenseCategories])
 
   const parseTimeParts = useCallback((timeString) => {
     const [hours = "08", minutes = "00"] = (timeString || "08:00").split(":")
@@ -647,6 +661,15 @@ function BudgetDetailsScreen({
     if (typeOrTab === "expenses") return "expense"
     return "income"
   }
+
+  const getCategoriesForType = useCallback(
+    (typeOrTab) => {
+      const key = resolveTypeKey(typeOrTab)
+      const list = resolvedCategories[key]
+      return Array.isArray(list) ? list : []
+    },
+    [resolvedCategories],
+  )
 
   const openAddModal = (typeArg) => {
     const resolvedType = resolveTypeKey(typeArg || tab)
@@ -967,7 +990,7 @@ function BudgetDetailsScreen({
       category,
       amount,
       percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
-      icon: categories.expense.find((c) => c.name === category)?.icon || "💰",
+      icon: expenseCategories.find((c) => c.name === category)?.icon || "💰",
     }))
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5) // Show top 5 categories
@@ -1614,7 +1637,7 @@ function BudgetDetailsScreen({
                 <div className="transaction-info">
                   <div className="transaction-main">
                     <span className="transaction-icon">
-                      {categories[t.type].find((c) => c.name === t.category)?.icon || "💰"}
+                      {getCategoriesForType(t.type).find((c) => c.name === t.category)?.icon || "💰"}
                     </span>
                     <div className="transaction-details-main">
                       <span className="transaction-name">{t.name}</span>
@@ -1700,7 +1723,7 @@ function BudgetDetailsScreen({
               disabled={loading}
             >
               <option value="">Select Category</option>
-              {categories[resolveTypeKey(formTx.type)]?.map((c) => (
+              {getCategoriesForType(formTx.type).map((c) => (
                 <option key={c.name} value={c.name}>
                   {c.icon} {c.name}
                 </option>

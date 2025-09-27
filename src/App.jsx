@@ -45,6 +45,33 @@ const cloneDefaultCategories = () => ({
   expense: DEFAULT_CATEGORIES.expense.map((category) => ({ ...category })),
 })
 
+const cloneCategories = (categories) => ({
+  income: Array.isArray(categories.income)
+    ? categories.income.map((category) => ({ ...category }))
+    : [],
+  expense: Array.isArray(categories.expense)
+    ? categories.expense.map((category) => ({ ...category }))
+    : [],
+})
+
+const isValidCategoriesShape = (value) =>
+  value &&
+  typeof value === "object" &&
+  !Array.isArray(value) &&
+  Array.isArray(value.income) &&
+  Array.isArray(value.expense)
+
+const sanitizeCategories = (value) => {
+  if (!isValidCategoriesShape(value)) {
+    return null
+  }
+
+  return cloneCategories({
+    income: value.income.filter((category) => category && typeof category === "object"),
+    expense: value.expense.filter((category) => category && typeof category === "object"),
+  })
+}
+
 function AppContent() {
   const { user, loading: authLoading, initializing, status: authStatus } = useAuth()
   const [budgets, setBudgetsState] = useState([])
@@ -168,8 +195,13 @@ function AppContent() {
           console.error("Error loading categories:", error)
           encounteredError = true
         }
-        if (categoriesData?.categories) {
-          setCategories(categoriesData.categories)
+        const validatedCategories = sanitizeCategories(categoriesData?.categories)
+
+        if (validatedCategories) {
+          setCategories(validatedCategories)
+        } else if (categoriesData?.categories !== undefined) {
+          console.warn("Received malformed categories payload, using defaults instead.")
+          setCategories(cloneDefaultCategories())
         } else if (error?.code === "PGRST116") {
           setCategories(cloneDefaultCategories())
         }
@@ -192,10 +224,17 @@ function AppContent() {
   }, [user, authLoading, initializing, setBudgets, applyMetadata])
 
   const updateCategories = async (nextCategories) => {
-    setCategories(nextCategories)
+    const validatedCategories = sanitizeCategories(nextCategories)
+    const safeCategories = validatedCategories || cloneDefaultCategories()
+
+    if (!validatedCategories) {
+      console.warn("Attempted to set invalid categories payload, falling back to defaults.")
+    }
+
+    setCategories(safeCategories)
     if (!user) return
     try {
-      const { error } = await updateUserCategories(user.id, nextCategories)
+      const { error } = await updateUserCategories(user.id, safeCategories)
       if (!error) {
         markDataAsStale()
       }
