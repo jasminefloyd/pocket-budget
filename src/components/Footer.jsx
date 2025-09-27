@@ -10,7 +10,7 @@ const NAV_ITEMS = [
 const keyToViewMode = {
   home: "budgets",
   goals: "goals",
-  reports: "ai",
+  reports: "reports",
   settings: "settings",
 }
 

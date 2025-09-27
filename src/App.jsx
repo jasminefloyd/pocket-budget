@@ -8,6 +8,7 @@ import BudgetDetailsScreen from "./screens/BudgetDetailsScreen"
 import CategoriesScreen from "./screens/CategoriesScreen"
 import GoalsScreen from "./screens/GoalsScreen"
 import AIInsightsScreen from "./screens/AIInsightsScreen"
+import ReportsScreen from "./screens/ReportsScreen"
 import SettingsScreen from "./screens/SettingsScreen"
 import LoadingScreen from "./components/LoadingScreen"
 import LoginScreen from "./screens/LoginScreen"
@@ -237,6 +238,21 @@ function AppContent() {
     [budgets, selectedBudget],
   )
 
+  const handleOpenAIInsights = useCallback(
+    (budgetId) => {
+      if (budgetId) {
+        const targetBudget = budgets.find((budget) => budget.id === budgetId)
+        if (targetBudget) {
+          setSelectedBudget(targetBudget)
+        }
+      } else if (!selectedBudget && budgets.length > 0) {
+        setSelectedBudget(budgets[0])
+      }
+      setViewMode("ai")
+    },
+    [budgets, selectedBudget, setSelectedBudget, setViewMode],
+  )
+
   useEffect(() => {
     if ((viewMode === "details" || viewMode === "ai") && !activeBudget) {
       if (budgets.length > 0) {
@@ -337,6 +353,10 @@ function AppContent() {
         />
       )}
 
+      {viewMode === "reports" && (
+        <ReportsScreen budgets={budgets} categories={categories} onViewInsights={handleOpenAIInsights} />
+      )}
+
       {viewMode === "ai" && activeBudget && <AIInsightsScreen budget={activeBudget} setViewMode={setViewMode} />}
 
       {viewMode === "ai" && !activeBudget && (
@@ -350,6 +370,7 @@ function AppContent() {
         <SettingsScreen
           user={user}
           categories={categories}
+          budgets={budgets}
           onManageCategories={() => setViewMode("categories")}
         />
       )}
