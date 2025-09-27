@@ -5,6 +5,7 @@ import PropTypes from "prop-types"
 import { createTransaction, updateTransaction, updateBudget, getCashBurn } from "../lib/supabase"
 import { calculateBudgetPacing } from "../lib/pacing"
 import { useAuth } from "../contexts/AuthContext"
+import AdSlot from "../components/AdSlot"
 
 const CYCLE_OPTIONS = [
   { type: "monthly", label: "Monthly" },
@@ -26,9 +27,11 @@ const sparklineBlocks = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
 
 const toSparkline = (values) => {
   if (!values?.length) return "▁▁▁▁▁▁"
-  const max = Math.max(...values)
-  if (max <= 0) return "▁".repeat(values.length)
-  return values
+  const recentValues = values.slice(-6)
+  const paddedValues = recentValues.length >= 6 ? recentValues : [...Array(6 - recentValues.length).fill(0), ...recentValues]
+  const max = Math.max(...paddedValues)
+  if (max <= 0) return "▁".repeat(paddedValues.length)
+  return paddedValues
     .map((value) => {
       const normalized = Math.max(0, value) / max
       const index = Math.min(sparklineBlocks.length - 1, Math.round(normalized * (sparklineBlocks.length - 1)))
@@ -1522,6 +1525,12 @@ function BudgetDetailsScreen({
             </button>
           ))}
         </div>
+
+        <AdSlot
+          placement="cashburn-insights"
+          headline="Trim cash burn with Pocket Coach"
+          body="Get a weekly check-in from our partners and lower leaks by up to $45 on average."
+        />
 
         <div className="cashburn-settings">
           <div className="settings-row">
