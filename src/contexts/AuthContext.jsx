@@ -150,13 +150,19 @@ export function AuthProvider({ children }) {
       try {
         setStatus("checking-session")
         const timestamp = getStoredLoginTimestamp()
+        const hasStoredTimestamp = timestamp != null
         const sessionExpired = hasSessionExpired(timestamp)
         if (sessionExpired) {
           clearLoginTimestamp()
-          try {
-            await supabase.auth.signOut()
-          } catch (signOutError) {
-            console.warn("Failed to clear Supabase session while expiring stored session", signOutError)
+          if (hasStoredTimestamp) {
+            try {
+              await supabase.auth.signOut()
+            } catch (signOutError) {
+              console.warn(
+                "Failed to clear Supabase session while expiring stored session",
+                signOutError,
+              )
+            }
           }
           if (!mountedRef.current) return
           safeSetState(() => {
@@ -172,6 +178,9 @@ export function AuthProvider({ children }) {
         )
         const { user: sessionUser } = await Promise.race([getCurrentUser(), timeout])
         if (!mountedRef.current) return
+        if (sessionUser) {
+          persistLoginTimestamp()
+        }
         await handleSession(sessionUser)
       } catch (error) {
         console.warn("Failed to resolve initial session", error)
