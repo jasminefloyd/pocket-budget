@@ -1309,6 +1309,11 @@ body {
   z-index: 1;
 }
 
+.budgetCard:focus-visible {
+  outline: 3px solid var(--primary-500);
+  outline-offset: 4px;
+}
+
 .budgetCard-content {
   display: flex;
   justify-content: space-between;
