@@ -972,6 +972,16 @@ function BudgetDetailsScreen({
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5) // Show top 5 categories
 
+  useEffect(() => {
+    if (selectedSlice === null) return
+
+    if (!categoryData[selectedSlice]) {
+      setSelectedSlice(null)
+    }
+  }, [budget.id, categoryData.length, selectedSlice])
+
+  const selectedCategory = selectedSlice !== null ? categoryData[selectedSlice] : null
+
   // Generate colors for categories
   const categoryColors = [
     "#ef4444", // red-500
@@ -1326,7 +1336,7 @@ function BudgetDetailsScreen({
                 </div>
 
                 {/* Selected slice details */}
-                {selectedSlice !== null && (
+                {selectedCategory && (
                   <div className="slice-details">
                     <div className="slice-details-content">
                       <div className="slice-header">
@@ -1334,12 +1344,12 @@ function BudgetDetailsScreen({
                           className="slice-color-dot"
                           style={{ backgroundColor: categoryColors[selectedSlice % categoryColors.length] }}
                         ></div>
-                        <span className="slice-icon">{categoryData[selectedSlice].icon}</span>
-                        <span className="slice-category">{categoryData[selectedSlice].category}</span>
+                        <span className="slice-icon">{selectedCategory.icon}</span>
+                        <span className="slice-category">{selectedCategory.category}</span>
                       </div>
-                      <div className="slice-amount">${categoryData[selectedSlice].amount.toFixed(2)}</div>
+                      <div className="slice-amount">${selectedCategory.amount.toFixed(2)}</div>
                       <div className="slice-percentage">
-                        {categoryData[selectedSlice].percentage.toFixed(1)}% of total spending
+                        {selectedCategory.percentage.toFixed(1)}% of total spending
                       </div>
                     </div>
                   </div>
