@@ -147,6 +147,7 @@ function AppContent() {
   const [viewMode, setViewMode] = useState("budgets")
   const [dataPhase, setDataPhase] = useState("idle")
   const [cacheStatus, setCacheStatus] = useState({ budgets: false, categories: false })
+  const [refreshToken, setRefreshToken] = useState(0)
   const lastFetchedUserIdRef = useRef(null)
   const cacheStatusRef = useRef(cacheStatus)
   const refreshTimerRef = useRef(null)
@@ -176,6 +177,7 @@ function AppContent() {
         }
         return latestHasCache ? "refreshing" : "loading"
       })
+      setRefreshToken((token) => token + 1)
     }, delay)
   }, [user?.id])
 
@@ -451,7 +453,7 @@ function AppContent() {
     return () => {
       isCurrent = false
     }
-  }, [user, authLoading, initializing, setBudgets, hasCachedData])
+  }, [user, authLoading, initializing, setBudgets, hasCachedData, refreshToken])
 
   const updateCategories = async (nextCategories) => {
     const validatedCategories = sanitizeCategories(nextCategories)
