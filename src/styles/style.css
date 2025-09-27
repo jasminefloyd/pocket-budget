@@ -1730,6 +1730,28 @@ body {
   color: var(--red-600);
 }
 
+.goal-pace-days {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.6rem;
+  border-radius: var(--radius-full);
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  background: var(--gray-100);
+  color: var(--gray-600);
+}
+
+.goal-pace-days.ahead {
+  background: rgba(59, 130, 246, 0.14);
+  color: var(--blue-600);
+}
+
+.goal-pace-days.behind {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--red-600);
+}
+
 .goal-complete {
   display: inline-flex;
   align-items: center;
@@ -1838,8 +1860,44 @@ body {
 
 .goal-contributions li {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 0.25rem;
   font-size: 0.9rem;
+  color: var(--gray-700);
+  background: white;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--gray-200);
+  padding: 0.5rem 0.75rem;
+  box-shadow: var(--shadow-xs);
+}
+
+.goal-update-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.goal-update-amount {
+  font-weight: 600;
+  color: var(--green-600);
+}
+
+.goal-update-note {
+  color: var(--gray-600);
+  font-size: 0.85rem;
+}
+
+.goal-update-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--gray-500);
+}
+
+.goal-update-meta span:last-child {
+  font-weight: 600;
   color: var(--gray-700);
 }
 
@@ -1947,7 +2005,7 @@ body {
   position: absolute;
   top: -10%;
   font-size: 1.25rem;
-  animation: fall 2.4s linear forwards;
+  animation: fall 0.75s ease-out forwards;
 }
 
 @keyframes fall {
@@ -2580,6 +2638,63 @@ body {
 .budget-ad-copy {
   font-size: 0.9rem;
   color: #4c1d95;
+}
+
+.ad-slot {
+  margin-top: 1rem;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(120deg, rgba(59, 130, 246, 0.08), rgba(16, 185, 129, 0.08));
+  padding: 1rem 1.25rem;
+  transition: opacity 0.28s ease;
+  opacity: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.ad-slot[data-ad-loaded="true"] {
+  opacity: 1;
+}
+
+.ad-slot-inner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  transform: translateY(4px);
+  transition: transform 0.28s ease;
+}
+
+.ad-slot-inner.is-loaded {
+  transform: translateY(0);
+}
+
+.ad-slot-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: rgba(17, 24, 39, 0.08);
+  color: var(--gray-700);
+  border-radius: var(--radius-full);
+  padding: 0.25rem 0.6rem;
+}
+
+.ad-slot-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--gray-700);
+}
+
+.ad-slot-copy strong {
+  font-size: 1rem;
+  color: var(--gray-900);
+}
+
+.ad-slot-copy p {
+  margin: 0;
+  font-size: 0.9rem;
 }
 
 /* Receipt image */
@@ -3454,6 +3569,12 @@ select.input {
 }
 
 /* Compact Analysis Grid */
+.insight-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
 .analysis-grid-compact {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3482,6 +3603,66 @@ select.input {
   border-radius: var(--radius-md);
   border-left: 2px solid var(--primary-500);
   font-size: 0.8rem;
+}
+
+.recommendations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.recommendation-card {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.recommendation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.recommendation-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.impact-badge {
+  background: rgba(16, 185, 129, 0.18);
+  color: var(--green-700);
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--radius-full);
+  padding: 0.25rem 0.6rem;
+}
+
+.recommendation-summary {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--gray-700);
+}
+
+.recommendation-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--primary-600);
+}
+
+.recommendation-details summary::marker {
+  color: var(--primary-600);
+}
+
+.recommendation-details p {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: var(--gray-600);
 }
 
 /* Compact Goals */
@@ -3528,7 +3709,8 @@ select.input {
   .strengths-improvements-grid,
   .analysis-grid-compact,
   .tips-grid,
-  .goals-container-compact {
+  .goals-container-compact,
+  .recommendations-grid {
     grid-template-columns: 1fr;
   }
 

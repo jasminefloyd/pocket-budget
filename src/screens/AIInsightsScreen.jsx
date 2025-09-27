@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from "react"
 import PropTypes from "prop-types"
 import { useAuth } from "../contexts/AuthContext"
 import { generateAIInsight, getAIInsights } from "../lib/supabase"
+import useRenderTimer from "../hooks/useRenderTimer"
+import { buildAIRecommendations, buildReadableSummary, calculateGradeLevel } from "../lib/recommendations"
 
 export default function AIInsightsScreen({ budget, setViewMode }) {
   const { user } = useAuth()
@@ -12,6 +14,7 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState(null)
+  const [showFullSummary, setShowFullSummary] = useState(false)
 
   const calculateMetrics = useCallback(() => {
     const transactions = budget.transactions || []
@@ -88,6 +91,26 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
   }, [history, selectedId])
 
   const insightPayload = selectedEntry?.insights || null
+  const metricsSnapshot = useMemo(() => calculateMetrics(), [calculateMetrics])
+  const readableSummary = useMemo(
+    () => buildReadableSummary(metricsSnapshot, insightPayload),
+    [metricsSnapshot, insightPayload],
+  )
+  const recommendations = useMemo(
+    () => buildAIRecommendations(metricsSnapshot, insightPayload),
+    [metricsSnapshot, insightPayload],
+  )
+  const summaryGrade = useMemo(() => calculateGradeLevel(readableSummary), [readableSummary])
+  const showDetailedSummary = Boolean(
+    insightPayload?.summary && insightPayload.summary.trim() && insightPayload.summary !== readableSummary,
+  )
+  const renderPerf = useRenderTimer({
+    name: "ai-insights-cards",
+    thresholds: [{ limit: generating ? 1500 : 700, label: generating ? "recompute" : "cached" }],
+    dependencies: [generating, selectedEntry?.id],
+    enabled: Boolean(insightPayload),
+  })
+
   const hasDetailedGuidance = useMemo(
     () =>
       Boolean(
@@ -134,6 +157,10 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
     loadInsights()
   }, [loadInsights])
 
+  useEffect(() => {
+    setShowFullSummary(false)
+  }, [selectedEntry?.id])
+
   const handleGenerate = useCallback(async () => {
     if (!userId) return
     setGenerating(true)
@@ -158,6 +185,7 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
           return [data, ...withoutDuplicate]
         })
         setSelectedId(data.id)
+        setShowFullSummary(false)
       }
     } catch (invokeError) {
       console.error("Unexpected error generating insights", invokeError)
@@ -254,7 +282,7 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
       {error && !generating && <p className="error-message" role="alert">{error}</p>}
 
       {insightPayload && (
-        <>
+        <div className="insight-content" {...renderPerf.dataAttributes}>
           <div className="compact-health-score">
             <div className="health-score-content">
               <div className="health-score-number">{insightPayload.healthScore}/10</div>
@@ -268,13 +296,44 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
             </div>
           </div>
 
-          <div className="summary-callout">
+          <div
+            className="summary-callout"
+            data-reading-grade={summaryGrade}
+            aria-live="polite"
+            aria-label="Financial overview summary"
+          >
             <div className="callout-icon">💡</div>
             <div className="callout-content">
               <h3 className="callout-title">Financial Overview</h3>
-              <p className="callout-text">{insightPayload.summary}</p>
+              <p className="callout-text">{showFullSummary && showDetailedSummary ? insightPayload.summary : readableSummary}</p>
+              {showDetailedSummary && (
+                <button type="button" className="link-button" onClick={() => setShowFullSummary((prev) => !prev)}>
+                  {showFullSummary ? "Show simple view" : "Learn more"}
+                </button>
+              )}
             </div>
           </div>
+
+          {recommendations.length > 0 && (
+            <div className="report-section">
+              <h2 className="section-title">✅ Actionable recommendations</h2>
+              <div className="recommendations-grid">
+                {recommendations.map((recommendation) => (
+                  <div key={recommendation.id} className="recommendation-card">
+                    <div className="recommendation-header">
+                      <h3>{recommendation.title}</h3>
+                      <span className="impact-badge">{recommendation.impact}</span>
+                    </div>
+                    <p className="recommendation-summary">{recommendation.summary}</p>
+                    <details className="recommendation-details">
+                      <summary>Learn more</summary>
+                      <p>{recommendation.details}</p>
+                    </details>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="report-section">
             <h2 className="section-title">📈 Spending Insights</h2>
@@ -375,7 +434,7 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
               </div>
             </>
           )}
-        </>
+        </div>
       )}
 
       <div className="report-actions">

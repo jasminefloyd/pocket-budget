@@ -4,6 +4,8 @@ import { useMemo, useState } from "react"
 import PropTypes from "prop-types"
 import { createBudget, updateBudget, deleteBudget } from "../lib/supabase"
 import { calculateBudgetPacing } from "../lib/pacing"
+import AdSlot from "../components/AdSlot"
+import useRenderTimer from "../hooks/useRenderTimer"
 
 const DEFAULT_CATEGORY_ALLOCATIONS = [
   { category: "Rent", budgetedAmount: 1200 },
@@ -73,6 +75,13 @@ export default function BudgetsScreen({
   const [loading, setLoading] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createConfig, setCreateConfig] = useState(() => buildInitialConfig(budgets.length))
+
+  const summaryPerf = useRenderTimer({
+    name: "budgets-overview",
+    thresholds: [{ limit: 500, label: "4g-target" }],
+    dependencies: [budgets.length],
+    enabled: budgets.length > 0,
+  })
 
   const cycleSummary = useMemo(
     () =>
@@ -295,17 +304,24 @@ export default function BudgetsScreen({
       </div>
 
       {budgets.length > 0 && (
-        <div className="cycle-summary-card">
-          <div className="cycle-summary-title">Budget cycles</div>
-          <div className="cycle-summary-stats">
-            {activeCycleTypes.length === 0 && <span>No active budgets yet.</span>}
-            {activeCycleTypes.map((type) => (
-              <span key={type} className={`cycle-chip cycle-${type}`}>
-                {getCycleLabel(type)} · {cycleSummary[type]}
-              </span>
-            ))}
+        <>
+          <div className="cycle-summary-card" {...summaryPerf.dataAttributes}>
+            <div className="cycle-summary-title">Budget cycles</div>
+            <div className="cycle-summary-stats">
+              {activeCycleTypes.length === 0 && <span>No active budgets yet.</span>}
+              {activeCycleTypes.map((type) => (
+                <span key={type} className={`cycle-chip cycle-${type}`}>
+                  {getCycleLabel(type)} · {cycleSummary[type]}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
+          <AdSlot
+            placement="overview-summary"
+            headline="Earn cash back on planned spend"
+            body="Use the Pocket Budget partner card and turn category budgets into weekly rewards."
+          />
+        </>
       )}
 
       {budgets.length === 0 ? (

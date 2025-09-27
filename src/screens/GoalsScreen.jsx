@@ -23,7 +23,26 @@ const normalizeContribution = (contribution) => ({
   ...contribution,
   amount: Number(contribution.amount || 0),
   contributed_at: contribution.contributed_at || contribution.date || contribution.created_at || new Date().toISOString(),
+  note: contribution.note || contribution.memo || "",
 })
+
+const buildContributionProgressMap = (goal) => {
+  const map = new Map()
+  const contributions = goal.goal_contributions || []
+  if (!contributions.length) {
+    return map
+  }
+  const chronological = contributions
+    .slice()
+    .sort((a, b) => new Date(a.contributed_at) - new Date(b.contributed_at))
+  let runningTotal = 0
+  chronological.forEach((contribution) => {
+    runningTotal += Number(contribution.amount || 0)
+    const percent = goal.targetAmount > 0 ? Math.min(100, (runningTotal / goal.targetAmount) * 100) : 0
+    map.set(contribution.id, percent)
+  })
+  return map
+}
 
 const normalizeGoalRecord = (goal) => {
   const contributions = (goal.goal_contributions || goal.contributions || []).map(normalizeContribution)
@@ -86,6 +105,9 @@ const getGoalMetrics = (goal) => {
   const totalWeeks = totalDurationMs ? Math.max(1, Math.ceil(totalDurationMs / MS_IN_WEEK)) : 1
   const weeklyTarget = totalWeeks > 0 ? targetAmount / totalWeeks : targetAmount
 
+  const totalDays = totalDurationMs ? Math.max(1, Math.round(totalDurationMs / MS_IN_DAY)) : null
+  const dailyTarget = totalDays ? targetAmount / totalDays : null
+
   const weekStart = getWeekStart(now)
   const weekEnd = new Date(weekStart.getTime() + MS_IN_WEEK)
   const contributedThisWeek = contributions
@@ -105,6 +127,7 @@ const getGoalMetrics = (goal) => {
   }
 
   const guidanceShortfall = Math.max(0, weeklyTarget - contributedThisWeek)
+  const paceDays = dailyTarget ? delta / dailyTarget : null
 
   return {
     totalContributed,
@@ -115,6 +138,9 @@ const getGoalMetrics = (goal) => {
     pace,
     plannedTotal,
     totalWeeks,
+    paceDays,
+    dailyTarget,
+    requiredWeeklyContribution: weeklyTarget,
   }
 }
 
@@ -354,7 +380,7 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onD
       setTimeout(() => {
         setConfettiGoalId(null)
         setMilestoneCelebration(null)
-      }, 4000)
+      }, 760)
     }
   }
 
@@ -452,12 +478,32 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onD
         goals.map((goal) => {
           const metrics = getGoalMetrics(goal)
           const achievedMilestones = milestoneBadges(goal)
+          const contributionProgress = buildContributionProgressMap(goal)
+          const paceDaysRounded = Math.round(metrics.paceDays || 0)
+          const hasSchedule = Number.isFinite(metrics.paceDays)
+          let paceDaysLabel = "On schedule"
+          if (hasSchedule && paceDaysRounded > 0) {
+            paceDaysLabel = `Ahead by ${Math.min(60, paceDaysRounded)} day${paceDaysRounded === 1 ? "" : "s"}`
+          } else if (hasSchedule && paceDaysRounded < 0) {
+            const behindDays = Math.abs(paceDaysRounded)
+            paceDaysLabel = `Behind by ${Math.min(60, behindDays)} day${behindDays === 1 ? "" : "s"}`
+          }
+
           return (
             <div key={goal.id} className="goal-card">
               <div className="goal-card-header">
                 <div>
                   <h3>{goal.name}</h3>
                   <span className={`goal-pace-badge ${metrics.pace}`}>{metrics.pace.replace("-", " ")}</span>
+                  {hasSchedule && (
+                    <span
+                      className={`goal-pace-days ${
+                        paceDaysRounded > 0 ? "ahead" : paceDaysRounded < 0 ? "behind" : "on-track"
+                      }`}
+                    >
+                      {paceDaysLabel}
+                    </span>
+                  )}
                   {metrics.progress >= 100 && <span className="goal-complete">🎉 Complete</span>}
                 </div>
                 <button className="icon-button" onClick={() => handleDeleteGoal(goal.id)} title="Delete goal">
@@ -475,8 +521,8 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onD
 
               <div className="goal-meta-grid">
                 <div>
-                  <p className="meta-label">Weekly target</p>
-                  <p className="meta-value">{formatCurrency(metrics.weeklyTarget)}</p>
+                  <p className="meta-label">Required weekly contribution</p>
+                  <p className="meta-value">{formatCurrency(metrics.requiredWeeklyContribution)}</p>
                 </div>
                 <div>
                   <p className="meta-label">This week</p>
@@ -517,14 +563,26 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onD
 
               {goal.goal_contributions && goal.goal_contributions.length > 0 && (
                 <div className="goal-contributions">
-                  <h4>Recent contributions</h4>
+                  <h4>Progress updates</h4>
                   <ul>
-                    {goal.goal_contributions.slice(0, 4).map((contribution) => (
-                      <li key={contribution.id}>
-                        <span>{new Date(contribution.contributed_at).toLocaleDateString()}</span>
-                        <span>{formatCurrency(contribution.amount)}</span>
-                      </li>
-                    ))}
+                    {goal.goal_contributions.slice(0, 4).map((contribution) => {
+                      const percentAfter = contributionProgress.has(contribution.id)
+                        ? contributionProgress.get(contribution.id)
+                        : metrics.progress
+                      const percentDisplay = Math.min(100, Math.max(0, Math.round(percentAfter)))
+                      return (
+                        <li key={contribution.id}>
+                          <div className="goal-update-main">
+                            <span className="goal-update-amount">+{formatCurrency(contribution.amount)}</span>
+                            {contribution.note && <span className="goal-update-note">{contribution.note}</span>}
+                          </div>
+                          <div className="goal-update-meta">
+                            <span>{new Date(contribution.contributed_at).toLocaleDateString()}</span>
+                            <span>{`${percentDisplay}% to goal`}</span>
+                          </div>
+                        </li>
+                      )
+                    })}
                   </ul>
                 </div>
               )}
@@ -675,13 +733,13 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onD
 
       {confettiGoalId && (
         <div className="confetti-overlay">
-          {Array.from({ length: 60 }).map((_, index) => (
+          {Array.from({ length: 30 }).map((_, index) => (
             <span
               key={index}
               className="confetti-piece"
               style={{
                 left: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 1.5}s`,
+                animationDelay: `${Math.random() * 0.05}s`,
               }}
             >
               🎉
