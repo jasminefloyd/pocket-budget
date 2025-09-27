@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 
+import { hasSessionExpired } from "./session"
+
 const REQUIRED_ENV_VARS = ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"]
 
 const missing = REQUIRED_ENV_VARS.filter((key) => !import.meta.env[key])
@@ -17,6 +19,28 @@ export const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.m
 })
 
 const storage = typeof window !== "undefined" ? window.localStorage : null
+
+const SESSION_TIMESTAMP_KEY = "fulltest-session-timestamp"
+const DEMO_SESSION_KEY = "fulltest-demo-session"
+
+export const persistLoginTimestamp = () => {
+  if (!storage) return
+  storage.setItem(SESSION_TIMESTAMP_KEY, Date.now().toString())
+}
+
+export const clearLoginTimestamp = () => {
+  if (!storage) return
+  storage.removeItem(SESSION_TIMESTAMP_KEY)
+}
+
+export const getStoredLoginTimestamp = () => {
+  if (!storage) return null
+  const raw = storage.getItem(SESSION_TIMESTAMP_KEY)
+  if (!raw) return null
+  const parsed = Number.parseInt(raw, 10)
+  if (Number.isNaN(parsed)) return null
+  return parsed
+}
 
 const FULLTEST_DEMO_ACCOUNT = {
   id: "fulltest-demo-user-id",
@@ -64,29 +88,57 @@ const demoStore = {
   contributions: [],
 }
 
+export const clearStoredDemoSession = () => {
+  const hadSession = Boolean(demoStore.session)
+  let storedSessionDetected = false
+  if (storage) {
+    storedSessionDetected = Boolean(storage.getItem(DEMO_SESSION_KEY))
+  }
+  demoStore.session = null
+  if (storage) {
+    storage.removeItem(DEMO_SESSION_KEY)
+  }
+  return hadSession || storedSessionDetected
+}
+
 const persistDemoSession = (session) => {
+  if (!session) {
+    clearStoredDemoSession()
+    clearLoginTimestamp()
+    return
+  }
+
   demoStore.session = session
   if (storage) {
-    if (session) {
-      storage.setItem("fulltest-demo-session", JSON.stringify(session))
-    } else {
-      storage.removeItem("fulltest-demo-session")
-    }
+    storage.setItem(DEMO_SESSION_KEY, JSON.stringify(session))
   }
+  persistLoginTimestamp()
 }
 
 const hydrateDemoSession = () => {
   if (demoStore.session) return demoStore.session
   if (!storage) return null
   try {
-    const raw = storage.getItem("fulltest-demo-session")
+    const raw = storage.getItem(DEMO_SESSION_KEY)
     if (!raw) return null
+    const timestamp = getStoredLoginTimestamp()
+    if (hasSessionExpired(timestamp)) {
+      clearStoredDemoSession()
+      clearLoginTimestamp()
+      return null
+    }
     const parsed = JSON.parse(raw)
-    if (!parsed?.user) return null
+    if (!parsed?.user) {
+      clearStoredDemoSession()
+      clearLoginTimestamp()
+      return null
+    }
     demoStore.session = parsed
     return parsed
   } catch (error) {
     console.error("Failed to hydrate demo session", error)
+    clearStoredDemoSession()
+    clearLoginTimestamp()
     return null
   }
 }
@@ -150,7 +202,11 @@ export const signIn = async (email, password) => {
     }
     return { data: { user: session.user, session }, error: null }
   }
-  return supabase.auth.signInWithPassword({ email, password })
+  const result = await supabase.auth.signInWithPassword({ email, password })
+  if (!result.error && result.data?.session) {
+    persistLoginTimestamp()
+  }
+  return result
 }
 
 export const signInWithGoogle = async () => {
