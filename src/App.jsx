@@ -103,7 +103,7 @@ function AppContent() {
       setViewMode("budgets")
       setDataPhase("idle")
     }
-  }, [user])
+  }, [user, setBudgets])
 
   useEffect(() => {
     if (!user || authLoading || initializing) {
@@ -167,7 +167,7 @@ function AppContent() {
     return () => {
       isCurrent = false
     }
-  }, [user, authLoading, initializing])
+  }, [user, authLoading, initializing, setBudgets, applyMetadata])
 
   const updateCategories = async (nextCategories) => {
     setCategories(nextCategories)

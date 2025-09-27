@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import PropTypes from "prop-types"
-import { createTransaction, updateTransaction, updateBudget } from "../lib/supabase"
+import { createTransaction, updateTransaction, updateBudget, getCashBurn } from "../lib/supabase"
 import { calculateBudgetPacing } from "../lib/pacing"
 import { useAuth } from "../contexts/AuthContext"
 
@@ -36,6 +36,16 @@ const toSparkline = (values) => {
       return sparklineBlocks[index]
     })
     .join("")
+}
+
+const DAY_INDEX = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
 }
 
 const formatCurrency = (value) => `$${Number.parseFloat(value || 0).toFixed(2)}`
@@ -81,12 +91,16 @@ export default function BudgetDetailsScreen({
   setSelectedBudget,
   onMetadataChange,
 }) {
-  const { userProfile } = useAuth()
+  const { user, userProfile } = useAuth()
   const planTier = userProfile?.plan_tier || userProfile?.planTier || "free"
   const hasAdvancedStructures = PAID_PLAN_TIERS.includes(String(planTier).toLowerCase())
-  const metadata = budget.metadata || {}
-  const insightsPreferences = budget.insightsPreferences || metadata.insights || {}
-  const changeLog = budget.changeLog || metadata.changeLog || []
+  const isFreePlan = !hasAdvancedStructures
+  const metadata = useMemo(() => budget.metadata || {}, [budget.metadata])
+  const insightsPreferences = useMemo(
+    () => budget.insightsPreferences || metadata.insights || {},
+    [budget.insightsPreferences, metadata.insights],
+  )
+  const changeLog = useMemo(() => budget.changeLog || metadata.changeLog || [], [budget.changeLog, metadata.changeLog])
 
   const [tab, setTab] = useState("expenses")
   const [showModal, setShowModal] = useState(false)
@@ -144,6 +158,9 @@ export default function BudgetDetailsScreen({
   const [showAddCategory, setShowAddCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
   const [newCategoryAmount, setNewCategoryAmount] = useState("")
+  const [remoteBurnSummary, setRemoteBurnSummary] = useState(null)
+  const [burnSyncError, setBurnSyncError] = useState(null)
+  const [burnSyncLoading, setBurnSyncLoading] = useState(false)
 
   const transactions = useMemo(
     () => (budget.transactions || []).map((tx) => ({ ...tx, date: ensureISODate(tx.date) })),
@@ -193,10 +210,13 @@ export default function BudgetDetailsScreen({
 
   const ITEMS_PER_PAGE = 7
 
-  const persistMetadata = (updater) => {
-    if (!onMetadataChange) return
-    onMetadataChange(budget.id, updater)
-  }
+  const persistMetadata = useCallback(
+    (updater) => {
+      if (!onMetadataChange) return
+      onMetadataChange(budget.id, updater)
+    },
+    [onMetadataChange, budget.id],
+  )
 
   const handleAllocationChange = (categoryName, value) => {
     const parsed = Number.parseFloat(value)
@@ -454,17 +474,7 @@ export default function BudgetDetailsScreen({
     return Array.from(registry).sort((a, b) => a.localeCompare(b))
   }, [budget.categoryBudgets, categories.expense])
 
-  const dayIndex = {
-    sunday: 0,
-    monday: 1,
-    tuesday: 2,
-    wednesday: 3,
-    thursday: 4,
-    friday: 5,
-    saturday: 6,
-  }
-
-  const parseTimeParts = (timeString) => {
+  const parseTimeParts = useCallback((timeString) => {
     const [hours = "08", minutes = "00"] = (timeString || "08:00").split(":")
     const parsedHours = Number.parseInt(hours, 10)
     const parsedMinutes = Number.parseInt(minutes, 10)
@@ -472,18 +482,21 @@ export default function BudgetDetailsScreen({
       hours: Number.isFinite(parsedHours) ? parsedHours : 8,
       minutes: Number.isFinite(parsedMinutes) ? parsedMinutes : 0,
     }
-  }
+  }, [])
 
-  const resolveScheduleStart = (referenceDate) => {
-    const anchor = new Date(referenceDate)
-    const scheduleKey = String(reportSchedule.day || "sunday").toLowerCase()
-    const targetDay = dayIndex[scheduleKey] ?? 0
-    const diff = (anchor.getDay() - targetDay + 7) % 7
-    anchor.setDate(anchor.getDate() - diff)
-    const { hours, minutes } = parseTimeParts(reportSchedule.time)
-    anchor.setHours(hours, minutes, 0, 0)
-    return anchor
-  }
+  const resolveScheduleStart = useCallback(
+    (referenceDate) => {
+      const anchor = new Date(referenceDate)
+      const scheduleKey = String(reportSchedule.day || "sunday").toLowerCase()
+      const targetDay = DAY_INDEX[scheduleKey] ?? 0
+      const diff = (anchor.getDay() - targetDay + 7) % 7
+      anchor.setDate(anchor.getDate() - diff)
+      const { hours, minutes } = parseTimeParts(reportSchedule.time)
+      anchor.setHours(hours, minutes, 0, 0)
+      return anchor
+    },
+    [reportSchedule.day, reportSchedule.time, parseTimeParts],
+  )
 
   const weeklyReport = useMemo(() => {
     const now = new Date()
@@ -539,19 +552,22 @@ export default function BudgetDetailsScreen({
       currentStart,
       currentEnd,
     }
-  }, [transactions, categoriesToAnalyse, reportSchedule, pacing])
+  }, [transactions, categoriesToAnalyse, pacing, resolveScheduleStart])
 
   const quietHoursStart = Number(nudgeConfig.quietStart) ?? 21
   const quietHoursEnd = Number(nudgeConfig.quietEnd) ?? 7
 
-  const isWithinQuietHours = (date) => {
-    const hour = date.getHours()
-    if (quietHoursStart === quietHoursEnd) return false
-    if (quietHoursStart < quietHoursEnd) {
-      return hour >= quietHoursStart && hour < quietHoursEnd
-    }
-    return hour >= quietHoursStart || hour < quietHoursEnd
-  }
+  const isWithinQuietHours = useCallback(
+    (date) => {
+      const hour = date.getHours()
+      if (quietHoursStart === quietHoursEnd) return false
+      if (quietHoursStart < quietHoursEnd) {
+        return hour >= quietHoursStart && hour < quietHoursEnd
+      }
+      return hour >= quietHoursStart || hour < quietHoursEnd
+    },
+    [quietHoursStart, quietHoursEnd],
+  )
 
   useEffect(() => {
     if (!hasAdvancedStructures || !nudgeConfig.enabled) return
@@ -580,14 +596,16 @@ export default function BudgetDetailsScreen({
         budgeted: candidate.budgeted,
       })
     }
-  }, [
-    hasAdvancedStructures,
-    nudgeConfig,
-    metadata.insights,
-    budget.cycleMetadata,
-    pacing.categories,
-    nudgeToast,
-  ])
+    }, [
+      hasAdvancedStructures,
+      nudgeConfig,
+      metadata.insights,
+      budget.cycleMetadata,
+      budget.id,
+      pacing.categories,
+      nudgeToast,
+      isWithinQuietHours,
+    ])
 
   const acknowledgeNudge = (categoryName) => {
     const cycleAnchor = budget.cycleMetadata?.currentStart
@@ -791,6 +809,137 @@ export default function BudgetDetailsScreen({
     .reduce((sum, t) => sum + t.budgetedAmount, 0)
 
   const balance = totalIncome - totalExpenses
+
+  const expenseTransactions = useMemo(
+    () => transactions.filter((tx) => tx.type === "expense"),
+    [transactions],
+  )
+
+  const localBurnSummary = useMemo(() => {
+    if (expenseTransactions.length === 0) {
+      return {
+        burnPerDay: 0,
+        burnPerWeek: 0,
+        burnPerMonth: 0,
+        daysLeft: null,
+        projectionDate: null,
+        status: "safe",
+        badgeLabel: "Safe Zone",
+      }
+    }
+
+    const DAY_MS = 1000 * 60 * 60 * 24
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 30)
+
+    const sampledTransactions = expenseTransactions.filter((tx) => {
+      const txDate = new Date(tx.date)
+      return !Number.isNaN(txDate.getTime()) && txDate >= cutoff
+    })
+
+    const windowed = sampledTransactions.length ? sampledTransactions : expenseTransactions
+
+    let earliest = Number.POSITIVE_INFINITY
+    let latest = 0
+    let total = 0
+
+    windowed.forEach((tx) => {
+      const timestamp = new Date(tx.date).getTime()
+      if (!Number.isFinite(timestamp)) return
+      earliest = Math.min(earliest, timestamp)
+      latest = Math.max(latest, timestamp)
+      total += tx.amount
+    })
+
+    if (!Number.isFinite(earliest) || !Number.isFinite(latest)) {
+      return {
+        burnPerDay: 0,
+        burnPerWeek: 0,
+        burnPerMonth: 0,
+        daysLeft: null,
+        projectionDate: null,
+        status: "safe",
+        badgeLabel: "Safe Zone",
+      }
+    }
+
+    const spanDays = Math.max(1, Math.round((latest - earliest) / DAY_MS) + 1)
+    const burnPerDay = total / spanDays
+    const burnPerWeek = burnPerDay * 7
+    const burnPerMonth = burnPerDay * 30
+
+    const safeBalance = Math.max(0, balance)
+    const daysLeft = burnPerDay > 0 ? Math.floor(safeBalance / burnPerDay) : null
+    const projectionDate = typeof daysLeft === "number" ? new Date(Date.now() + daysLeft * DAY_MS) : null
+
+    const status = typeof daysLeft === "number" && daysLeft < 15 ? "critical" : "safe"
+    const badgeLabel = status === "critical" ? "Critical Burn" : "Safe Zone"
+
+    return {
+      burnPerDay,
+      burnPerWeek,
+      burnPerMonth,
+      daysLeft,
+      projectionDate,
+      status,
+      badgeLabel,
+    }
+  }, [expenseTransactions, balance])
+
+  useEffect(() => {
+    if (!user?.id) return
+    let isActive = true
+
+    const loadBurnSummary = async () => {
+      setBurnSyncLoading(true)
+      try {
+        const { data, error } = await getCashBurn(user.id)
+        if (!isActive) return
+        if (error) {
+          console.error("Failed to fetch cash burn", error)
+          setBurnSyncError(error.message || "Unable to sync burn metrics")
+          setRemoteBurnSummary(null)
+          return
+        }
+        setBurnSyncError(null)
+        setRemoteBurnSummary(data || null)
+      } catch (burnError) {
+        if (!isActive) return
+        console.error("Unexpected cash burn error", burnError)
+        setBurnSyncError(burnError.message || "Unable to sync burn metrics")
+        setRemoteBurnSummary(null)
+      } finally {
+        if (isActive) {
+          setBurnSyncLoading(false)
+        }
+      }
+    }
+
+    loadBurnSummary()
+
+    return () => {
+      isActive = false
+    }
+  }, [user?.id, budget.id, transactions.length])
+
+  const burnSummary = useMemo(() => {
+    if (!remoteBurnSummary) {
+      return localBurnSummary
+    }
+
+    const projectionDate =
+      remoteBurnSummary.projectionDate instanceof Date || remoteBurnSummary.projectionDate === null
+        ? remoteBurnSummary.projectionDate
+        : remoteBurnSummary.projectionDate
+        ? new Date(remoteBurnSummary.projectionDate)
+        : null
+
+    return {
+      ...localBurnSummary,
+      ...remoteBurnSummary,
+      projectionDate,
+    }
+  }, [localBurnSummary, remoteBurnSummary])
 
   const pacing = calculateBudgetPacing(normalizedBudget)
 
@@ -1265,53 +1414,102 @@ export default function BudgetDetailsScreen({
             Weekly digest · next drop {weeklyReport.currentEnd ? new Date(weeklyReport.currentEnd).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "soon"}
           </span>
         </div>
-        <div className="cashburn-card-grid">
-          {weeklyReport.topCards.length === 0 && (
-            <div className="empty-state small">Track spending this week to unlock leak insights.</div>
-          )}
-          {weeklyReport.topCards.map((card) => (
-            <button
-              type="button"
-              key={card.category}
-              className={`cashburn-card pacing-${card.status}`}
-              onClick={() => setExpandedLeak((current) => (current === card.category ? null : card.category))}
-            >
-              <div className="cashburn-card-header">
-                <span className="cashburn-category">{card.category}</span>
-                <div className={`pacing-indicator pacing-${card.status}`}>
-                  <span className="pacing-dot" aria-hidden="true" />
-                  <span className="pacing-label">{card.statusLabel}</span>
-                </div>
-              </div>
-              <div className="cashburn-amount-row">
-                <span className="cashburn-amount">{formatCurrency(card.current)}</span>
-                <span className={`cashburn-delta ${card.delta >= 0 ? "expense" : "income"}`}>
-                  {card.delta >= 0 ? "+" : "-"}${Math.abs(card.delta).toFixed(2)} vs last week
-                </span>
-              </div>
-              <div className="cashburn-change">Change {card.pctChange.toFixed(0)}%</div>
-              {expandedLeak === card.category && (
-                <div className="cashburn-trend">
-                  <div className="sparkline">{toSparkline(weeklyReport.trends[card.category])}</div>
-                  <div className="sparkline-label">Last 6 weeks</div>
-                </div>
-              )}
-            </button>
-          ))}
-          {isFreePlan && budget.adsEnabled && (
-            <div className="budget-ad-unit" role="note" aria-label="Sponsored offer">
-              <div className="budget-ad-badge">Sponsored</div>
-              <div className="budget-ad-copy">Lower recurring bills with Pocket Partner Energy — average savings $18/mo.</div>
-            </div>
-          )}
+
+        <div className="cashburn-summary-grid">
+          <div className={`cashburn-status-badge status-${burnSummary.status}`}>{burnSummary.badgeLabel}</div>
+          <div className="cashburn-metric">
+            <span className="cashburn-metric-label">Daily burn</span>
+            <span className="cashburn-metric-value">{formatCurrency(burnSummary.burnPerDay)}</span>
+          </div>
+          <div className="cashburn-metric">
+            <span className="cashburn-metric-label">Weekly burn</span>
+            <span className="cashburn-metric-value">{formatCurrency(burnSummary.burnPerWeek)}</span>
+          </div>
+          <div className="cashburn-metric">
+            <span className="cashburn-metric-label">Monthly burn</span>
+            <span className="cashburn-metric-value">{formatCurrency(burnSummary.burnPerMonth)}</span>
+          </div>
+          <div className="cashburn-metric projection">
+            <span className="cashburn-metric-label">Days left</span>
+            <span className="cashburn-metric-value">
+              {typeof burnSummary.daysLeft === "number"
+                ? `${Math.max(0, burnSummary.daysLeft)} ${burnSummary.daysLeft === 1 ? "day" : "days"}`
+                : burnSummary.burnPerDay === 0
+                  ? "Not burning"
+                  : "—"}
+            </span>
+            {burnSummary.projectionDate && (
+              <span className="cashburn-projection-date">
+                until {burnSummary.projectionDate.toLocaleDateString([], { dateStyle: "medium" })}
+              </span>
+            )}
+          </div>
         </div>
 
-        <div className="cashburn-settings">
-          <div className="settings-row">
-            <label>Report schedule</label>
-            <div className="settings-inputs">
-              <select value={reportSchedule.day} onChange={(e) => handleReportScheduleChange("day", e.target.value)}>
-                {Object.keys(dayIndex).map((day) => (
+        {burnSyncLoading && (
+          <div className="cashburn-sync-status" role="status">Syncing latest burn metrics…</div>
+        )}
+        {burnSyncError && !burnSyncLoading && (
+          <div className="cashburn-sync-status error" role="status">
+            Using local estimate — {burnSyncError}
+          </div>
+        )}
+
+        {isFreePlan ? (
+          <>
+            <div className="plan-teaser">
+              Upgrade or start a trial to unlock leak alerts, trend graphs, and burn pacing recommendations.
+            </div>
+            {budget.adsEnabled && (
+              <div className="budget-ad-unit" role="note" aria-label="Sponsored offer">
+                <div className="budget-ad-badge">Sponsored</div>
+                <div className="budget-ad-copy">Lower recurring bills with Pocket Partner Energy — average savings $18/mo.</div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="cashburn-card-grid">
+              {weeklyReport.topCards.length === 0 && (
+                <div className="empty-state small">Track spending this week to unlock leak insights.</div>
+              )}
+              {weeklyReport.topCards.map((card) => (
+                <button
+                  type="button"
+                  key={card.category}
+                  className={`cashburn-card pacing-${card.status}`}
+                  onClick={() => setExpandedLeak((current) => (current === card.category ? null : card.category))}
+                >
+                  <div className="cashburn-card-header">
+                    <span className="cashburn-category">{card.category}</span>
+                    <div className={`pacing-indicator pacing-${card.status}`}>
+                      <span className="pacing-dot" aria-hidden="true" />
+                      <span className="pacing-label">{card.statusLabel}</span>
+                    </div>
+                  </div>
+                  <div className="cashburn-amount-row">
+                    <span className="cashburn-amount">{formatCurrency(card.current)}</span>
+                    <span className={`cashburn-delta ${card.delta >= 0 ? "expense" : "income"}`}>
+                      {card.delta >= 0 ? "+" : "-"}${Math.abs(card.delta).toFixed(2)} vs last week
+                    </span>
+                  </div>
+                  <div className="cashburn-change">Change {card.pctChange.toFixed(0)}%</div>
+                  {expandedLeak === card.category && (
+                    <div className="cashburn-trend">
+                      <div className="sparkline">{toSparkline(weeklyReport.trends[card.category])}</div>
+                      <div className="sparkline-label">Last 6 weeks</div>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="cashburn-settings">
+              <div className="settings-row">
+                <label>Report schedule</label>
+                <div className="settings-inputs">
+                  <select value={reportSchedule.day} onChange={(e) => handleReportScheduleChange("day", e.target.value)}>
+                    {Object.keys(DAY_INDEX).map((day) => (
                   <option key={day} value={day}>
                     {day.charAt(0).toUpperCase() + day.slice(1)}
                   </option>
@@ -1394,6 +1592,8 @@ export default function BudgetDetailsScreen({
             )}
           </div>
         </div>
+      </>
+      )}
       </div>
 
       {/* Transaction Tabs and List */}
@@ -1813,6 +2013,35 @@ BudgetDetailsScreen.propTypes = {
         budgetedAmount: PropTypes.number.isRequired,
       }),
     ),
+    metadata: PropTypes.object,
+    insightsPreferences: PropTypes.shape({
+      trackedCategories: PropTypes.arrayOf(PropTypes.string),
+      reportSchedule: PropTypes.shape({
+        day: PropTypes.string,
+        time: PropTypes.string,
+      }),
+      nudges: PropTypes.shape({
+        enabled: PropTypes.bool,
+        threshold: PropTypes.number,
+      }),
+    }),
+    changeLog: PropTypes.arrayOf(
+      PropTypes.shape({
+        at: PropTypes.string,
+        message: PropTypes.string,
+        type: PropTypes.string,
+      }),
+    ),
+    cycleMetadata: PropTypes.shape({
+      type: PropTypes.string,
+      currentStart: PropTypes.string,
+      payFrequencyDays: PropTypes.number,
+      customDays: PropTypes.number,
+      lengthDays: PropTypes.number,
+      cycleLength: PropTypes.number,
+    }),
+    adsEnabled: PropTypes.bool,
+    createdAt: PropTypes.string,
   }).isRequired,
   categories: PropTypes.shape({
     income: PropTypes.arrayOf(categoryShape).isRequired,

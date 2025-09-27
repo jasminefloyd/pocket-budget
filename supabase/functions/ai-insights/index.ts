@@ -116,6 +116,34 @@ serve(async (req) => {
 
     const supabaseClient = createClient(supabaseUrl, serviceRoleKey)
 
+    const { data: budgetRecord, error: budgetLookupError } = await supabaseClient
+      .from("budgets")
+      .select("id, user_id")
+      .eq("id", budgetId)
+      .single()
+
+    if (budgetLookupError) {
+      if (budgetLookupError.code === "PGRST116") {
+        return new Response(
+          JSON.stringify({ error: "Budget not found." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 },
+        )
+      }
+
+      console.error("Failed to verify budget ownership", budgetLookupError)
+      return new Response(
+        JSON.stringify({ error: "Unable to verify budget ownership." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 },
+      )
+    }
+
+    if (budgetRecord?.user_id !== userId) {
+      return new Response(
+        JSON.stringify({ error: "You do not have access to this budget." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 },
+      )
+    }
+
     const model = tier === "paid" ? "gpt-4o" : "gpt-4o-mini"
     const prompt = buildPrompt(metrics)
 
