@@ -2,7 +2,17 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import PropTypes from "prop-types"
-import { createUserProfile, getCurrentUser, getUserProfile, supabase } from "../lib/supabase"
+import {
+  clearLoginTimestamp,
+  clearStoredDemoSession,
+  createUserProfile,
+  getCurrentUser,
+  getStoredLoginTimestamp,
+  getUserProfile,
+  persistLoginTimestamp,
+  supabase,
+} from "../lib/supabase"
+import { hasSessionExpired } from "../lib/session"
 
 const AuthContext = createContext(undefined)
 
@@ -140,6 +150,27 @@ export function AuthProvider({ children }) {
     const resolveInitialSession = async () => {
       try {
         setStatus("checking-session")
+        const timestamp = getStoredLoginTimestamp()
+        const sessionExpired = hasSessionExpired(timestamp)
+        if (sessionExpired) {
+          const hadDemoSession = clearStoredDemoSession()
+          clearLoginTimestamp()
+          if (!hadDemoSession) {
+            try {
+              await supabase.auth.signOut()
+            } catch (signOutError) {
+              console.warn("Failed to clear Supabase session while expiring stored session", signOutError)
+            }
+          }
+          if (!mountedRef.current) return
+          safeSetState(() => {
+            setUser(null)
+            setUserProfile(null)
+            setLoading(false)
+          })
+          setStatus("signed-out")
+          return
+        }
         const timeout = new Promise((_, reject) =>
           setTimeout(() => reject(new Error("Session lookup timed out")), SESSION_TIMEOUT_MS),
         )
@@ -164,7 +195,13 @@ export function AuthProvider({ children }) {
 
     resolveInitialSession()
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN") {
+        persistLoginTimestamp()
+      }
+      if (event === "SIGNED_OUT") {
+        clearLoginTimestamp()
+      }
       if (!mountedRef.current) return
       setStatus("auth-transition")
       await handleSession(session?.user ?? null)
