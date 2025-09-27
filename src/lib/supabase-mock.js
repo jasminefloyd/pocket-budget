@@ -302,6 +302,17 @@ export const getUserProfile = async (userId) => {
   return { data: profile, error: profile ? null : { code: "PGRST116" } }
 }
 
+export const updateUserProfile = async (userId, updates) => {
+  await delay()
+  const existing = JSON.parse(localStorage.getItem(`user_profiles_${userId}`) || "null")
+  if (!existing) {
+    return { data: null, error: { message: "Profile not found" } }
+  }
+  const merged = { ...existing, ...updates, updated_at: new Date().toISOString() }
+  localStorage.setItem(`user_profiles_${userId}`, JSON.stringify(merged))
+  return { data: merged, error: null }
+}
+
 export const getBudgets = async (userId) => {
   await delay()
   const budgets = JSON.parse(localStorage.getItem(`budgets_${userId}`) || "[]")
@@ -415,4 +426,17 @@ export const updateUserCategories = async (userId, categories) => {
   const categoryData = { user_id: userId, categories }
   localStorage.setItem(`user_categories_${userId}`, JSON.stringify(categoryData))
   return { data: [categoryData], error: null }
+}
+
+export const getLatestAIInsight = async (userId) => {
+  await delay()
+  if (!userId) {
+    return { data: null, error: null }
+  }
+  const insights = JSON.parse(localStorage.getItem(`ai_insights_${userId}`) || "[]")
+  if (!Array.isArray(insights) || insights.length === 0) {
+    return { data: null, error: null }
+  }
+  const sorted = [...insights].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  return { data: sorted[0], error: null }
 }

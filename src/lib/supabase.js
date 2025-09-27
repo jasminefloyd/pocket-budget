@@ -95,6 +95,26 @@ export const getUserProfile = async (userId) => {
   return supabase.from("user_profiles").select("*").eq("id", userId).single()
 }
 
+export const updateUserProfile = async (userId, updates) => {
+  if (!userId) {
+    return { data: null, error: { message: "User ID is required" } }
+  }
+
+  const payload = {
+    ...updates,
+    updated_at: new Date().toISOString(),
+  }
+
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .update(payload)
+    .eq("id", userId)
+    .select("*")
+    .single()
+
+  return { data, error }
+}
+
 const normalizeTransactionRecord = (transaction) => ({
   ...transaction,
   amount: Number(transaction.amount || 0),
@@ -405,6 +425,26 @@ export const getAIInsights = async (userId, budgetId, options = {}) => {
 
   const { data, error } = await query
   return { data: (data || []).map(normalizeInsightRecord), error }
+}
+
+export const getLatestAIInsight = async (userId) => {
+  if (!userId) {
+    return { data: null, error: null }
+  }
+
+  const { data, error } = await supabase
+    .from("ai_insights")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+
+  if (error) {
+    return { data: null, error }
+  }
+
+  const record = Array.isArray(data) ? data[0] : data
+  return { data: record ? normalizeInsightRecord(record) : null, error: null }
 }
 
 export const generateAIInsight = async ({ userId, budgetId, metrics = {} }) => {

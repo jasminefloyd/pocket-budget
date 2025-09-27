@@ -216,8 +216,13 @@ export function AuthProvider({ children }) {
       loading,
       initializing,
       status,
+      refreshProfile: async () => {
+        if (!user) return null
+        return ensureProfile(user)
+      },
+      setUserProfile: applyProfile,
     }),
-    [user, userProfile, loading, initializing, status],
+    [user, userProfile, loading, initializing, status, ensureProfile, applyProfile],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
