@@ -5,6 +5,7 @@ const DEFAULT_HEIGHT = 140
 
 export default function AdSlot({ placement, minHeight = DEFAULT_HEIGHT, headline, body }) {
   const [isLoaded, setIsLoaded] = useState(false)
+  const resolvedMinHeight = typeof minHeight === "number" ? `${minHeight}px` : minHeight
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoaded(true), 160)
@@ -14,7 +15,7 @@ export default function AdSlot({ placement, minHeight = DEFAULT_HEIGHT, headline
   return (
     <div
       className="ad-slot"
-      style={{ minHeight }}
+      style={{ minHeight: resolvedMinHeight, "--ad-slot-min-height": resolvedMinHeight }}
       data-ad-placement={placement}
       data-ad-loaded={isLoaded}
       role="complementary"

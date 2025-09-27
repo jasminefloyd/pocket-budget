@@ -1326,6 +1326,128 @@ body {
   cursor: pointer;
 }
 
+.overview-summary-stack {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cycle-summary-card {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cycle-summary-title {
+  font-weight: 700;
+  color: var(--gray-900);
+  font-size: 1.05rem;
+}
+
+.cycle-summary-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: var(--gray-600);
+}
+
+.cycle-chip,
+.cycle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--gray-100);
+  color: var(--gray-700);
+  line-height: 1;
+}
+
+.cycle-pill-lock {
+  font-size: 0.85em;
+  display: inline-flex;
+  align-items: center;
+}
+
+.cycle-pill-text {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.cycle-pill.is-locked,
+.cycle-chip.cycle-per-paycheck {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--primary-700);
+}
+
+.cycle-pill.cycle-per-paycheck {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--primary-700);
+}
+
+.cycle-pill.cycle-custom,
+.cycle-chip.cycle-custom {
+  background: rgba(168, 85, 247, 0.12);
+  color: var(--purple-600);
+}
+
+.cycle-pill.cycle-monthly,
+.cycle-chip.cycle-monthly {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--green-600);
+}
+
+.budgetSummaryRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.budgetSummaryItem {
+  background: var(--gray-100);
+  border-radius: var(--radius-lg);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.9rem;
+  color: var(--gray-600);
+}
+
+.budgetSummaryItem strong {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+.budgetSummaryItem.guardrail-green,
+.guardrail-green,
+.guardrail-green strong {
+  color: var(--green-600);
+}
+
+.budgetSummaryItem.guardrail-yellow,
+.guardrail-yellow,
+.guardrail-yellow strong {
+  color: #d97706;
+}
+
+.budgetSummaryItem.guardrail-red,
+.guardrail-red,
+.guardrail-red strong {
+  color: var(--red-600);
+}
+
 .budgetNameRow {
   display: flex;
   align-items: center;
@@ -1358,6 +1480,11 @@ body {
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--gray-900);
+}
+
+.budgetBalance span {
+  font-size: 1.35rem;
+  font-weight: 700;
 }
 
 .budgetItemContainer {
@@ -2652,6 +2779,7 @@ body {
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  min-height: var(--ad-slot-min-height, 140px);
 }
 
 .ad-slot[data-ad-loaded="true"] {
@@ -2819,6 +2947,25 @@ body {
   height: 100%;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
   animation: shimmer 0.6s;
+}
+
+@media (max-width: 640px) {
+  .cycle-summary-card {
+    padding: 1rem 1.25rem;
+  }
+
+  .cycle-summary-stats {
+    gap: 0.4rem;
+  }
+
+  .budgetCard-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .budgetSummaryItem {
+    flex: 1 1 100%;
+  }
 }
 
 /* Responsive improvements */
