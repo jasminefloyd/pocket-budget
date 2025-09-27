@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
 import { getBudgets, getUserCategories, updateUserCategories } from "./lib/supabase"
 import BudgetsScreen from "./screens/BudgetsScreen"
@@ -50,8 +50,13 @@ function AppContent() {
   const [selectedBudget, setSelectedBudget] = useState(null)
   const [viewMode, setViewMode] = useState("budgets")
   const [dataPhase, setDataPhase] = useState("idle")
+  const lastFetchedUserIdRef = useRef(null)
 
   const shouldShowAuthLoading = initializing || authLoading || authStatus === "auth-transition"
+  const markDataAsStale = useCallback(() => {
+    if (!user?.id) return
+    lastFetchedUserIdRef.current = null
+  }, [user?.id])
 
   const applyMetadata = useCallback((budget, metadataOverride) => {
     if (!budget?.id) return budget
@@ -102,6 +107,7 @@ function AppContent() {
       setSelectedBudget(null)
       setViewMode("budgets")
       setDataPhase("idle")
+      lastFetchedUserIdRef.current = null
     }
   }, [user])
 
@@ -110,21 +116,29 @@ function AppContent() {
       return
     }
 
+    if (lastFetchedUserIdRef.current === user.id) {
+      return
+    }
+
+    const currentUserId = user.id
+    lastFetchedUserIdRef.current = currentUserId
     let isCurrent = true
     setDataPhase("loading")
 
-    const fetchBudgets = getBudgets(user.id)
-    const fetchCategories = getUserCategories(user.id)
+    const fetchBudgets = getBudgets(currentUserId)
+    const fetchCategories = getUserCategories(currentUserId)
 
     Promise.allSettled([fetchBudgets, fetchCategories]).then((results) => {
       if (!isCurrent) return
 
       const [budgetResult, categoryResult] = results
+      let encounteredError = false
 
       if (budgetResult.status === "fulfilled") {
         const { data: budgetsData, error } = budgetResult.value
         if (error) {
           console.error("Error loading budgets:", error)
+          encounteredError = true
         }
         const normalizedBudgets = (budgetsData || []).map((budget) => ({
           id: budget.id,
@@ -145,12 +159,14 @@ function AppContent() {
         setBudgets(normalizedBudgets.map((budget) => applyMetadata(budget)))
       } else {
         console.error("Unexpected error resolving budgets:", budgetResult.reason)
+        encounteredError = true
       }
 
       if (categoryResult.status === "fulfilled") {
         const { data: categoriesData, error } = categoryResult.value
         if (error && error.code !== "PGRST116") {
           console.error("Error loading categories:", error)
+          encounteredError = true
         }
         if (categoriesData?.categories) {
           setCategories(categoriesData.categories)
@@ -159,8 +175,14 @@ function AppContent() {
         }
       } else {
         console.error("Unexpected error resolving categories:", categoryResult.reason)
+        encounteredError = true
       }
 
+      if (encounteredError) {
+        lastFetchedUserIdRef.current = null
+      } else {
+        lastFetchedUserIdRef.current = currentUserId
+      }
       setDataPhase("ready")
     })
 
@@ -173,7 +195,10 @@ function AppContent() {
     setCategories(nextCategories)
     if (!user) return
     try {
-      await updateUserCategories(user.id, nextCategories)
+      const { error } = await updateUserCategories(user.id, nextCategories)
+      if (!error) {
+        markDataAsStale()
+      }
     } catch (error) {
       console.error("Error updating categories:", error)
     }
@@ -248,11 +273,17 @@ function AppContent() {
           userId={user.id}
           onMetadataChange={handleBudgetMetadataUpdate}
           onMetadataRemove={handleBudgetMetadataRemoval}
+          onDataMutated={markDataAsStale}
         />
       )}
 
       {viewMode === "goals" && (
-        <GoalsScreen setViewMode={setViewMode} budgets={budgets} setBudgets={setBudgets} />
+        <GoalsScreen
+          setViewMode={setViewMode}
+          budgets={budgets}
+          setBudgets={setBudgets}
+          onDataMutated={markDataAsStale}
+        />
       )}
 
       {viewMode === "details" && activeBudget && (
@@ -264,6 +295,7 @@ function AppContent() {
           budgets={budgets}
           setSelectedBudget={setSelectedBudget}
           onMetadataChange={handleBudgetMetadataUpdate}
+          onDataMutated={markDataAsStale}
         />
       )}
 
