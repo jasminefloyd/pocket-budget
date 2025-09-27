@@ -13,6 +13,8 @@ const CYCLE_OPTIONS = [
   { type: "custom", label: "Custom" },
 ]
 
+const PAYWALLED_CYCLE_TYPES = new Set(["per-paycheck", "custom"])
+
 const getCycleLabel = (type) => {
   const option = CYCLE_OPTIONS.find((candidate) => candidate.type === type)
   if (option) return option.label
@@ -971,6 +973,10 @@ function BudgetDetailsScreen({
 
   const cycleType = budget.cycleMetadata?.type || "monthly"
   const cycleLabel = getCycleLabel(cycleType)
+  const isPaywalledCycle = PAYWALLED_CYCLE_TYPES.has(cycleType)
+  const cyclePillLabel = `${cycleLabel}${
+    isPaywalledCycle ? " (Pocket Budget Plus feature)" : ""
+  }`
   const cycleStartDate = budget.cycleMetadata?.currentStart
     ? new Date(budget.cycleMetadata.currentStart)
     : null
@@ -1153,8 +1159,16 @@ function BudgetDetailsScreen({
       />
 
       <div className="budget-cycle-banner">
-        <div className={`cycle-pill cycle-${cycleType}`}>
-          {cycleLabel}
+        <div
+          className={`cycle-pill cycle-${cycleType}${isPaywalledCycle ? " is-locked" : ""}`}
+          aria-label={cyclePillLabel}
+        >
+          {isPaywalledCycle && (
+            <span className="cycle-pill-lock" aria-hidden="true">
+              🔒
+            </span>
+          )}
+          <span className="cycle-pill-text">{cycleLabel}</span>
         </div>
         <div className="cycle-meta">
           <span>Started {cycleStartDisplay}</span>

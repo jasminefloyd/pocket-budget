@@ -36,6 +36,8 @@ const CYCLE_OPTIONS = [
   },
 ]
 
+const PAYWALLED_CYCLE_TYPES = new Set(["per-paycheck", "custom"])
+
 const getCycleLabel = (type) => {
   const option = CYCLE_OPTIONS.find((candidate) => candidate.type === type)
   if (option) {
@@ -303,8 +305,8 @@ export default function BudgetsScreen({
         </div>
       </div>
 
-      {budgets.length > 0 && (
-        <>
+      <div className="overview-summary-stack">
+        {budgets.length > 0 && (
           <div className="cycle-summary-card" {...summaryPerf.dataAttributes}>
             <div className="cycle-summary-title">Budget cycles</div>
             <div className="cycle-summary-stats">
@@ -316,13 +318,13 @@ export default function BudgetsScreen({
               ))}
             </div>
           </div>
-          <AdSlot
-            placement="overview-summary"
-            headline="Earn cash back on planned spend"
-            body="Use the Pocket Budget partner card and turn category budgets into weekly rewards."
-          />
-        </>
-      )}
+        )}
+        <AdSlot
+          placement="overview-summary"
+          headline="Earn cash back on planned spend"
+          body="Use the Pocket Budget partner card and turn category budgets into weekly rewards."
+        />
+      </div>
 
       {budgets.length === 0 ? (
         <div className="empty-state">
@@ -380,6 +382,11 @@ export default function BudgetsScreen({
             }
           }
 
+          const isPaywalledCycle = PAYWALLED_CYCLE_TYPES.has(cycleType)
+          const cyclePillLabel = `${cycleLabel}${
+            isPaywalledCycle ? " (Pocket Budget Plus feature)" : ""
+          }`
+
           return (
             <div
               key={budget.id}
@@ -393,7 +400,17 @@ export default function BudgetsScreen({
               <div className="budgetCard-content">
                 <div className="budgetCard-info">
                   <div className="budgetCycleRow">
-                    <span className={`cycle-pill cycle-${cycleType}`}>{cycleLabel}</span>
+                    <span
+                      className={`cycle-pill cycle-${cycleType}${isPaywalledCycle ? " is-locked" : ""}`}
+                      aria-label={cyclePillLabel}
+                    >
+                      {isPaywalledCycle && (
+                        <span className="cycle-pill-lock" aria-hidden="true">
+                          🔒
+                        </span>
+                      )}
+                      <span className="cycle-pill-text">{cycleLabel}</span>
+                    </span>
                     <div className={`pacing-indicator pacing-${overallPacing.status}`} title={overallPacing.tooltip} role="status">
                       <span className="pacing-dot" aria-hidden="true" />
                       <span className="pacing-label">{overallPacing.label}</span>
