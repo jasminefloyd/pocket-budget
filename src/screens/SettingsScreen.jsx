@@ -105,7 +105,6 @@ export default function SettingsScreen({ user, categories, budgets, onManageCate
   const [preferencesStatus, setPreferencesStatus] = useState(null)
   const [preferencesError, setPreferencesError] = useState(null)
   const [utilityStatus, setUtilityStatus] = useState(null)
-  const [utilityLoading, setUtilityLoading] = useState(false)
   const { preference, effectiveTheme, setThemePreference, resetToSystem } = useThemePreference()
 
   useEffect(() => {
@@ -219,33 +218,6 @@ export default function SettingsScreen({ user, categories, budgets, onManageCate
     anchor.click()
     URL.revokeObjectURL(url)
     setUtilityStatus("Data exported successfully")
-  }
-
-  const handleClearCache = async () => {
-    if (typeof window === "undefined") return
-    setUtilityLoading(true)
-    setUtilityStatus(null)
-    try {
-      const keysToRemove = []
-      for (let i = 0; i < localStorage.length; i += 1) {
-        const key = localStorage.key(i)
-        if (!key) continue
-        if (key.startsWith("pb:") || key.includes("budgets_") || key.includes("transactions_") || key.includes("mock")) {
-          keysToRemove.push(key)
-        }
-      }
-      keysToRemove.forEach((key) => localStorage.removeItem(key))
-      if (window.caches) {
-        const cacheKeys = await window.caches.keys()
-        await Promise.all(cacheKeys.map((cacheKey) => window.caches.delete(cacheKey)))
-      }
-      setUtilityStatus("Local cache cleared")
-    } catch (error) {
-      console.error("Failed to clear cache", error)
-      setUtilityStatus(error.message || "Unable to clear cache")
-    } finally {
-      setUtilityLoading(false)
-    }
   }
 
   const incomeCount = categories?.income?.length || 0
@@ -411,15 +383,6 @@ export default function SettingsScreen({ user, categories, budgets, onManageCate
             </button>
           </div>
 
-          <div className="settings-row">
-            <div>
-              <h3>Clear cache</h3>
-              <p className="settings-description">Remove stored sessions and offline data.</p>
-            </div>
-            <button type="button" className="link-button" onClick={handleClearCache} disabled={utilityLoading}>
-              {utilityLoading ? "Clearing…" : "Clear cache"}
-            </button>
-          </div>
           {utilityStatus && <p className="status-text">{utilityStatus}</p>}
         </div>
       </section>

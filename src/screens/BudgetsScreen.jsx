@@ -61,6 +61,23 @@ const buildInitialConfig = (existingBudgetsLength) => ({
 
 const formatCurrency = (value) => `$${Number.parseFloat(value || 0).toFixed(2)}`
 
+function BudgetSkeletonList() {
+  return (
+    <div className="skeleton-stack" role="status" aria-live="polite" aria-busy="true">
+      {[0, 1, 2].map((index) => (
+        <div key={index} className="skeleton-card">
+          <div className="skeleton-line skeleton-line-lg" />
+          <div className="skeleton-line skeleton-line-md" />
+          <div className="skeleton-line skeleton-line-sm" />
+          <div className="skeleton-line skeleton-line-lg skeleton-line-offset" />
+          <div className="skeleton-line skeleton-line-md" />
+        </div>
+      ))}
+      <span className="sr-only">Loading budgets…</span>
+    </div>
+  )
+}
+
 export default function BudgetsScreen({
   budgets,
   setSelectedBudget,
@@ -70,6 +87,7 @@ export default function BudgetsScreen({
   onMetadataChange,
   onMetadataRemove,
   onDataMutated,
+  isLoadingBudgets,
 }) {
   const [editingBudgetId, setEditingBudgetId] = useState(null)
   const [budgetNameInput, setBudgetNameInput] = useState("")
@@ -327,19 +345,23 @@ export default function BudgetsScreen({
       </div>
 
       {budgets.length === 0 ? (
-        <div className="empty-state">
-          <p>Welcome to Pocket Budget! Create your first budget to get started.</p>
-          <button
-            className="primary-button"
-            onClick={() => {
-              setCreateConfig(buildInitialConfig(budgets.length))
-              setShowCreateModal(true)
-            }}
-            disabled={loading}
-          >
-            Start a Monthly Budget
-          </button>
-        </div>
+        isLoadingBudgets ? (
+          <BudgetSkeletonList />
+        ) : (
+          <div className="empty-state">
+            <p>Welcome to Pocket Budget! Create your first budget to get started.</p>
+            <button
+              className="primary-button"
+              onClick={() => {
+                setCreateConfig(buildInitialConfig(budgets.length))
+                setShowCreateModal(true)
+              }}
+              disabled={loading}
+            >
+              Start a Monthly Budget
+            </button>
+          </div>
+        )
       ) : (
         budgets.map((budget) => {
           const pacing = calculateBudgetPacing(budget)
@@ -743,10 +765,12 @@ BudgetsScreen.propTypes = {
   onMetadataChange: PropTypes.func,
   onMetadataRemove: PropTypes.func,
   onDataMutated: PropTypes.func,
+  isLoadingBudgets: PropTypes.bool,
 }
 
 BudgetsScreen.defaultProps = {
   onMetadataChange: undefined,
   onMetadataRemove: undefined,
   onDataMutated: undefined,
+  isLoadingBudgets: false,
 }

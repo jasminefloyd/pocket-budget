@@ -127,12 +127,25 @@ const normalizeBudgetRecord = (budget) => ({
   transactions: (budget.transactions || []).map(normalizeTransactionRecord),
 })
 
-export const getBudgets = async (userId) => {
-  const { data, error } = await supabase
+export const getBudgets = async (userId, options = {}) => {
+  const { range, limit } = options
+
+  let query = supabase
     .from("budgets")
-    .select(`*, transactions (*)`)
+    .select(
+      `id, name, created_at, category_budgets, ` +
+        `transactions (id, name, amount, budgeted_amount, category, type, date, receipt_url)`,
+    )
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
+
+  if (range && typeof range.from === "number" && typeof range.to === "number") {
+    query = query.range(range.from, range.to)
+  } else if (typeof limit === "number") {
+    query = query.limit(limit)
+  }
+
+  const { data, error } = await query
 
   return {
     data: (data || []).map(normalizeBudgetRecord),
@@ -150,7 +163,10 @@ export const createBudget = async (userId, budgetData) => {
   const result = await supabase
     .from("budgets")
     .insert([payload])
-    .select(`*, transactions (*)`)
+    .select(
+      `id, name, created_at, category_budgets, ` +
+        `transactions (id, name, amount, budgeted_amount, category, type, date, receipt_url)`,
+    )
 
   if (result.error) {
     return { data: null, error: result.error }
@@ -161,7 +177,10 @@ export const createBudget = async (userId, budgetData) => {
   if (!rows.length) {
     const { data: latest, error: fetchError } = await supabase
       .from("budgets")
-      .select(`*, transactions (*)`)
+      .select(
+        `id, name, created_at, category_budgets, ` +
+          `transactions (id, name, amount, budgeted_amount, category, type, date, receipt_url)`,
+      )
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -283,7 +302,7 @@ export const getCashBurn = async (userId) => {
 }
 
 export const getUserCategories = async (userId) => {
-  return supabase.from("user_categories").select("*").eq("user_id", userId).single()
+  return supabase.from("user_categories").select("categories").eq("user_id", userId).single()
 }
 
 export const updateUserCategories = async (userId, categories) => {
@@ -295,7 +314,7 @@ export const updateUserCategories = async (userId, categories) => {
         categories,
       },
     ])
-    .select()
+    .select("categories")
 }
 
 const DEFAULT_MILESTONES = [25, 50, 75, 100]

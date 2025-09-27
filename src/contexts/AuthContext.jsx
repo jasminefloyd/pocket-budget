@@ -173,6 +173,16 @@ export function AuthProvider({ children }) {
           setStatus("signed-out")
           return
         }
+        const { data: localSessionData } = await supabase.auth.getSession()
+        const localUser = localSessionData?.session?.user
+
+        if (localUser) {
+          setStatus("restoring-session")
+          persistLoginTimestamp()
+          await handleSession(localUser)
+          return
+        }
+
         const timeout = new Promise((_, reject) =>
           setTimeout(() => reject(new Error("Session lookup timed out")), SESSION_TIMEOUT_MS),
         )

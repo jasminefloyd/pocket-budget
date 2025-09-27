@@ -1333,6 +1333,68 @@ body {
   gap: 1rem;
 }
 
+.skeleton-stack {
+  margin-top: 1.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.skeleton-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--gray-200);
+  background: var(--gray-100);
+  padding: 1.5rem;
+  min-height: 140px;
+  box-shadow: var(--shadow-sm);
+}
+
+.skeleton-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  transform: translateX(-100%);
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton-line {
+  height: 0.75rem;
+  background: var(--gray-200);
+  border-radius: 999px;
+  margin-bottom: 0.75rem;
+}
+
+.skeleton-line:last-child {
+  margin-bottom: 0;
+}
+
+.skeleton-line-lg {
+  width: 80%;
+}
+
+.skeleton-line-md {
+  width: 60%;
+}
+
+.skeleton-line-sm {
+  width: 35%;
+}
+
+.skeleton-line-offset {
+  margin-top: 1.5rem;
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
 .cycle-summary-card {
   background: white;
   border: 1px solid var(--gray-200);
@@ -4556,6 +4618,20 @@ select.input {
   background: rgba(30, 41, 59, 0.92);
   border-color: rgba(148, 163, 184, 0.1);
   box-shadow: none;
+}
+
+[data-theme="dark"] .skeleton-card {
+  background: rgba(30, 41, 59, 0.92);
+  border-color: rgba(148, 163, 184, 0.1);
+  box-shadow: none;
+}
+
+[data-theme="dark"] .skeleton-card::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+}
+
+[data-theme="dark"] .skeleton-line {
+  background: rgba(148, 163, 184, 0.2);
 }
 
 [data-theme="dark"] .category-list li {
