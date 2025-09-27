@@ -3562,6 +3562,41 @@ select.input {
   gap: 1.5rem;
 }
 
+.reports-layout {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: 1fr;
+}
+
+.reports-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.reports-group .report-grid {
+  margin: 0;
+}
+
+.reports-group.reports-summary {
+  gap: 1.5rem;
+}
+
+.reports-group.reports-charts,
+.reports-group.reports-insights {
+  gap: 1.5rem;
+}
+
+@media (min-width: 960px) {
+  .reports-layout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reports-group.reports-summary {
+    grid-column: 1 / -1;
+  }
+}
+
 .reports-header {
   display: flex;
   align-items: flex-start;
@@ -3607,7 +3642,9 @@ select.input {
   border: 1px solid rgba(15, 23, 42, 0.05);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1rem;
+  margin: 0;
+  width: 100%;
 }
 
 .report-card header {
