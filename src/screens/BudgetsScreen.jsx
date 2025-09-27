@@ -88,6 +88,7 @@ export default function BudgetsScreen({
   )
 
   const openBudget = (budget) => {
+    setOpenMenuId(null)
     setSelectedBudget(budget)
     setViewMode("details")
   }
@@ -355,10 +356,26 @@ export default function BudgetsScreen({
           const cycleType = budget.cycleMetadata?.type || "monthly"
           const cycleLabel = getCycleLabel(cycleType)
 
+          const handleCardKeyDown = (event) => {
+            if (event.currentTarget !== event.target) return
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault()
+              openBudget(budget)
+            }
+          }
+
           return (
-            <div key={budget.id} className="budgetCard">
+            <div
+              key={budget.id}
+              className="budgetCard"
+              role="button"
+              tabIndex={0}
+              aria-label={`View details for ${budget.name}`}
+              onClick={() => openBudget(budget)}
+              onKeyDown={handleCardKeyDown}
+            >
               <div className="budgetCard-content">
-                <div className="budgetCard-info" onClick={() => openBudget(budget)}>
+                <div className="budgetCard-info">
                   <div className="budgetCycleRow">
                     <span className={`cycle-pill cycle-${cycleType}`}>{cycleLabel}</span>
                     <div className={`pacing-indicator pacing-${overallPacing.status}`} title={overallPacing.tooltip} role="status">
