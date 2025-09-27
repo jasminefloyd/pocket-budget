@@ -4,9 +4,6 @@ import { useMemo, useState } from "react"
 import PropTypes from "prop-types"
 import { createBudget, updateBudget, deleteBudget } from "../lib/supabase"
 import { calculateBudgetPacing } from "../lib/pacing"
-import { useAuth } from "../contexts/AuthContext"
-
-const PAID_PLAN_TIERS = ["trial", "paid", "pro", "premium", "plus"]
 
 const DEFAULT_CATEGORY_ALLOCATIONS = [
   { category: "Rent", budgetedAmount: 1200 },
@@ -23,20 +20,17 @@ const CYCLE_OPTIONS = [
   {
     type: "monthly",
     label: "Monthly",
-    description: "Free forever. Resets on the first of each month.",
-    requiresPaid: false,
+    description: "Resets on the first of each month.",
   },
   {
     type: "per-paycheck",
     label: "Per-paycheck",
-    description: "Sync budgets to each paycheck during trial or paid tiers.",
-    requiresPaid: true,
+    description: "Sync budgets to each paycheck.",
   },
   {
     type: "custom",
     label: "Custom",
-    description: "Choose any cycle length you need (paid).",
-    requiresPaid: true,
+    description: "Choose any cycle length you need.",
   },
 ]
 
@@ -59,7 +53,6 @@ const buildInitialConfig = (existingBudgetsLength) => ({
   payFrequencyDays: 14,
   customDays: 30,
   includeDefaultCategories: true,
-  adsEnabled: true,
 })
 
 const formatCurrency = (value) => `$${Number.parseFloat(value || 0).toFixed(2)}`
@@ -74,11 +67,6 @@ export default function BudgetsScreen({
   onMetadataRemove,
   onDataMutated,
 }) {
-  const { userProfile } = useAuth()
-  const planTier = userProfile?.plan_tier || userProfile?.planTier || "free"
-  const hasAdvancedStructures = PAID_PLAN_TIERS.includes(String(planTier).toLowerCase())
-  const isFreePlan = !hasAdvancedStructures
-
   const [editingBudgetId, setEditingBudgetId] = useState(null)
   const [budgetNameInput, setBudgetNameInput] = useState("")
   const [openMenuId, setOpenMenuId] = useState(null)
@@ -126,12 +114,16 @@ export default function BudgetsScreen({
         console.error("Error creating budget:", error)
         alert("Failed to create budget. Please try again.")
       } else if (data?.[0]) {
+        const record = data[0]
+        const createdAt = record.created_at
+          ? new Date(record.created_at).toLocaleDateString()
+          : new Date().toLocaleDateString()
         const newBudget = {
-          id: data[0].id,
-          name: data[0].name,
-          createdAt: new Date(data[0].created_at).toLocaleDateString(),
-          categoryBudgets: data[0].category_budgets || baseCategories,
-          transactions: [],
+          id: record.id,
+          name: record.name,
+          createdAt,
+          categoryBudgets: record.category_budgets || baseCategories,
+          transactions: (record.transactions || []).map((tx) => ({ ...tx })),
         }
         setBudgets((prev) => [newBudget, ...prev])
         const now = new Date().toISOString()
@@ -148,7 +140,6 @@ export default function BudgetsScreen({
         onMetadataChange?.(newBudget.id, (metadata) => ({
           ...metadata,
           cycle: { ...metadata.cycle, ...cycleMetadata },
-          ads: { ...metadata.ads, enabled: createConfig.adsEnabled },
           changeLog: [
             {
               at: now,
@@ -226,12 +217,15 @@ export default function BudgetsScreen({
         console.error("Error duplicating budget:", error)
         alert("Failed to duplicate budget. Please try again.")
       } else if (data?.[0]) {
+        const record = data[0]
         const newBudget = {
-          id: data[0].id,
-          name: data[0].name,
-          createdAt: new Date(data[0].created_at).toLocaleDateString(),
-          categoryBudgets: data[0].category_budgets || [],
-          transactions: [],
+          id: record.id,
+          name: record.name,
+          createdAt: record.created_at
+            ? new Date(record.created_at).toLocaleDateString()
+            : new Date().toLocaleDateString(),
+          categoryBudgets: record.category_budgets || [],
+          transactions: (record.transactions || []).map((tx) => ({ ...tx })),
         }
         setBudgets((prev) => [newBudget, ...prev])
         const now = new Date().toISOString()
@@ -239,7 +233,6 @@ export default function BudgetsScreen({
         onMetadataChange?.(newBudget.id, (metadata) => ({
           ...metadata,
           cycle: { ...metadata.cycle, ...sourceCycle, lastEditedAt: now },
-          ads: { ...metadata.ads, enabled: budget.adsEnabled !== false },
           insights: {
             ...metadata.insights,
             ...(budget.insightsPreferences || {}),
@@ -367,10 +360,7 @@ export default function BudgetsScreen({
               <div className="budgetCard-content">
                 <div className="budgetCard-info" onClick={() => openBudget(budget)}>
                   <div className="budgetCycleRow">
-                    <span className={`cycle-pill cycle-${cycleType}`}>
-                      {cycleLabel}
-                      {cycleType !== "monthly" && isFreePlan && <span className="lock-icon" aria-hidden="true">🔒</span>}
-                    </span>
+                    <span className={`cycle-pill cycle-${cycleType}`}>{cycleLabel}</span>
                     <div className={`pacing-indicator pacing-${overallPacing.status}`} title={overallPacing.tooltip} role="status">
                       <span className="pacing-dot" aria-hidden="true" />
                       <span className="pacing-label">{overallPacing.label}</span>
@@ -484,14 +474,6 @@ export default function BudgetsScreen({
                     </div>
                   )}
 
-                  {isFreePlan && budget.adsEnabled && (
-                    <div className="budget-ad-unit" role="note" aria-label="Sponsored offer">
-                      <div className="budget-ad-badge">Sponsored</div>
-                      <div className="budget-ad-copy">
-                        <strong>Boost your savings.</strong> Earn 3.5% on emergency funds with Pocket Partner Bank.
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Options Menu Button */}
@@ -578,31 +560,24 @@ export default function BudgetsScreen({
               <span className="input-label">Cycle</span>
               <div className="cycle-option-grid">
                 {CYCLE_OPTIONS.map((option) => {
-                  const disabled = option.requiresPaid && !hasAdvancedStructures
                   const isSelected = createConfig.cycleType === option.type
                   return (
                     <button
                       key={option.type}
                       type="button"
-                      className={`cycle-option ${isSelected ? "selected" : ""} ${disabled ? "locked" : ""}`}
+                      className={`cycle-option ${isSelected ? "selected" : ""}`}
                       onClick={() => {
-                        if (disabled) return
                         setCreateConfig((prev) => ({ ...prev, cycleType: option.type }))
                       }}
-                      disabled={disabled}
                     >
                       <div className="cycle-option-title">
                         {option.label}
-                        {disabled && <span className="lock-icon" aria-hidden="true">🔒</span>}
                       </div>
                       <div className="cycle-option-description">{option.description}</div>
                     </button>
                   )
                 })}
               </div>
-              {!hasAdvancedStructures && (
-                <p className="plan-teaser">Upgrade or start a trial to unlock paycheck &amp; custom cycles.</p>
-              )}
             </div>
 
             {createConfig.cycleType === "per-paycheck" && (
@@ -665,24 +640,11 @@ export default function BudgetsScreen({
               <span>Include starter categories ({DEFAULT_CATEGORY_ALLOCATIONS.length})</span>
             </label>
 
-            {isFreePlan && (
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={createConfig.adsEnabled}
-                  onChange={(e) => setCreateConfig((prev) => ({ ...prev, adsEnabled: e.target.checked }))}
-                />
-                <span>Show relevant offers in my summary (helps keep Free free)</span>
-              </label>
-            )}
-
             <div className="modal-actions">
               <button
                 className="addButton primary-button"
                 onClick={createNewBudget}
-                disabled={
-                  loading || (!hasAdvancedStructures && createConfig.cycleType !== "monthly")
-                }
+                disabled={loading}
               >
                 {loading ? "Creating..." : "Create budget"}
               </button>
@@ -722,7 +684,6 @@ BudgetsScreen.propTypes = {
       transactions: PropTypes.arrayOf(transactionShape),
       categoryBudgets: PropTypes.arrayOf(categoryBudgetShape),
       cycleMetadata: PropTypes.object,
-      adsEnabled: PropTypes.bool,
     }),
   ).isRequired,
   setSelectedBudget: PropTypes.func.isRequired,

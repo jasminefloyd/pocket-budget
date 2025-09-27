@@ -3,13 +3,8 @@ import PropTypes from "prop-types"
 import { useAuth } from "../contexts/AuthContext"
 import { generateAIInsight, getAIInsights } from "../lib/supabase"
 
-const PAID_PLAN_TIERS = ["trial", "paid", "pro", "premium", "plus"]
-
 export default function AIInsightsScreen({ budget, setViewMode }) {
-  const { user, userProfile } = useAuth()
-  const planTier = userProfile?.plan_tier || userProfile?.planTier || "free"
-  const normalizedTier = String(planTier).toLowerCase()
-  const isPaidTier = PAID_PLAN_TIERS.includes(normalizedTier)
+  const { user } = useAuth()
 
   const [history, setHistory] = useState([])
   const [selectedId, setSelectedId] = useState(null)
@@ -74,8 +69,15 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
   }, [history, selectedId])
 
   const insightPayload = selectedEntry?.insights || null
-  const insightTier = selectedEntry?.tier || (isPaidTier ? "paid" : "free")
-  const showRecommendations = insightTier !== "free"
+  const hasDetailedGuidance = useMemo(
+    () =>
+      Boolean(
+        (insightPayload?.budgetSuggestions || []).length ||
+          (insightPayload?.strengths || []).length ||
+          (insightPayload?.improvements || []).length,
+      ),
+    [insightPayload],
+  )
 
   const loadInsights = useCallback(async () => {
     if (!user) return
@@ -123,7 +125,6 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
         userId: user.id,
         budgetId: budget.id,
         metrics,
-        tier: isPaidTier ? "paid" : "free",
       })
 
       if (invokeError) {
@@ -213,8 +214,8 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
       <div className="insight-run-meta">
         <div>
           <div className="insight-run-time">Generated {generatedAt || "recently"}</div>
-          <div className={`insight-tier-badge tier-${showRecommendations ? "paid" : "free"}`}>
-            {showRecommendations ? "Recommendations enabled" : "Summary insight"}
+          <div className={`insight-tier-badge tier-${hasDetailedGuidance ? "full" : "summary"}`}>
+            {hasDetailedGuidance ? "Detailed guidance" : "Summary insight"}
           </div>
         </div>
         {history.length > 1 && (
@@ -266,13 +267,11 @@ export default function AIInsightsScreen({ budget, setViewMode }) {
             </div>
           </div>
 
-          {!showRecommendations && (
-            <div className="plan-teaser">
-              Upgrade to unlock personalized recommendations, savings tips, and goal coaching.
-            </div>
+          {!hasDetailedGuidance && (
+            <div className="empty-state small">Log more activity to unlock personalized recommendations.</div>
           )}
 
-          {showRecommendations && (
+          {hasDetailedGuidance && (
             <>
               <div className="report-section">
                 <h2 className="section-title">📋 Budget Optimization</h2>

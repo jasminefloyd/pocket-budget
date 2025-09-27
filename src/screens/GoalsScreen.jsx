@@ -15,7 +15,6 @@ import { useAuth } from "../contexts/AuthContext"
 const DEFAULT_MILESTONES = [25, 50, 75, 100]
 const MS_IN_DAY = 1000 * 60 * 60 * 24
 const MS_IN_WEEK = MS_IN_DAY * 7
-const PAID_PLAN_TIERS = ["trial", "paid", "pro", "premium", "plus"]
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(value || 0))
@@ -120,10 +119,7 @@ const getGoalMetrics = (goal) => {
 }
 
 export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onDataMutated }) {
-  const { user, userProfile } = useAuth()
-  const planTier = userProfile?.plan_tier || userProfile?.planTier || "free"
-  const planTierNormalized = String(planTier).toLowerCase()
-  const canManageGoals = PAID_PLAN_TIERS.includes(planTierNormalized)
+  const { user } = useAuth()
   const [goals, setGoals] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -182,11 +178,6 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onD
   const handleCreateGoal = async (event) => {
     event.preventDefault()
     if (!user) return
-
-    if (!canManageGoals) {
-      alert("Goal creation is available during trial or paid plans.")
-      return
-    }
 
     const targetAmount = parseFloat(goalForm.targetAmount)
     if (!goalForm.name.trim() || Number.isNaN(targetAmount) || targetAmount <= 0) {
@@ -306,11 +297,6 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onD
     const amount = parseFloat(keypadValue)
     if (!selectedGoalId || Number.isNaN(amount) || amount <= 0) {
       alert("Enter a valid contribution amount")
-      return
-    }
-
-    if (!canManageGoals) {
-      alert("Logging contributions is available during trial or paid plans.")
       return
     }
 
@@ -451,12 +437,6 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onD
         <p className="tagline">Track milestones, weekly pace, and stay motivated.</p>
       </div>
 
-      {!canManageGoals && (
-        <div className="plan-teaser goals-teaser">
-          Goal creation and contribution tracking unlock during your free trial or with Pocket Budget Plus.
-        </div>
-      )}
-
       {error && <div className="error-banner">{error}</div>}
 
       {loading ? (
@@ -563,10 +543,6 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onD
           if (!selectedGoalId && goals.length) {
             setSelectedGoalId(goals[0].id)
           }
-          if (!canManageGoals) {
-            alert("Upgrade or start a trial to log contributions in real time.")
-            return
-          }
           setKeypadOpen(true)
         }}
         title="Log contribution"
@@ -582,13 +558,8 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onD
         <div className="modal-backdrop">
           <div className="modal">
             <h3>Create goal</h3>
-            {!canManageGoals && (
-              <div className="plan-teaser">
-                Goal creation is part of Pocket Budget Plus. Start a trial to map savings to your next big milestone.
-              </div>
-            )}
             <form onSubmit={handleCreateGoal} className="goal-form">
-              <fieldset disabled={!canManageGoals}>
+              <fieldset>
                 <label>
                   Goal name
                   <input
@@ -639,7 +610,7 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onD
                 <button type="button" className="ghost-button" onClick={() => setCreating(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="primary-button" disabled={saving || !canManageGoals}>
+                <button type="submit" className="primary-button" disabled={saving}>
                   {saving ? "Saving…" : "Create"}
                 </button>
               </div>
@@ -652,10 +623,7 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onD
         <div className="modal-backdrop">
           <div className="modal keypad-modal">
             <h3>Log contribution</h3>
-            {!canManageGoals && (
-              <p className="plan-teaser">Upgrade or start a trial to log automatic goal contributions.</p>
-            )}
-            <fieldset disabled={!canManageGoals}>
+            <fieldset>
               <label>
                 Choose goal
                 <select value={selectedGoalId} onChange={(event) => setSelectedGoalId(event.target.value)}>
@@ -695,7 +663,7 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onD
                   type="button"
                   className="primary-button"
                   onClick={handleContributionSubmit}
-                  disabled={loggingContribution || !canManageGoals}
+                  disabled={loggingContribution}
                 >
                   {loggingContribution ? "Saving…" : "Log"}
                 </button>

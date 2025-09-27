@@ -4,7 +4,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import PropTypes from "prop-types"
 import {
   clearLoginTimestamp,
-  clearStoredDemoSession,
   createUserProfile,
   getCurrentUser,
   getStoredLoginTimestamp,
@@ -153,14 +152,11 @@ export function AuthProvider({ children }) {
         const timestamp = getStoredLoginTimestamp()
         const sessionExpired = hasSessionExpired(timestamp)
         if (sessionExpired) {
-          const hadDemoSession = clearStoredDemoSession()
           clearLoginTimestamp()
-          if (!hadDemoSession) {
-            try {
-              await supabase.auth.signOut()
-            } catch (signOutError) {
-              console.warn("Failed to clear Supabase session while expiring stored session", signOutError)
-            }
+          try {
+            await supabase.auth.signOut()
+          } catch (signOutError) {
+            console.warn("Failed to clear Supabase session while expiring stored session", signOutError)
           }
           if (!mountedRef.current) return
           safeSetState(() => {
@@ -207,23 +203,9 @@ export function AuthProvider({ children }) {
       await handleSession(session?.user ?? null)
     })
 
-    const handleDemoAuthChange = async (event) => {
-      if (!mountedRef.current) return
-      const { session } = event.detail || {}
-      setStatus("auth-transition")
-      await handleSession(session?.user ?? null)
-    }
-
-    if (typeof window !== "undefined") {
-      window.addEventListener("demo-auth-change", handleDemoAuthChange)
-    }
-
     return () => {
       mountedRef.current = false
       authListener.subscription.unsubscribe()
-      if (typeof window !== "undefined") {
-        window.removeEventListener("demo-auth-change", handleDemoAuthChange)
-      }
     }
   }, [handleSession, safeSetState])
 
