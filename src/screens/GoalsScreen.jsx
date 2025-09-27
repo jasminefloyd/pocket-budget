@@ -119,7 +119,7 @@ const getGoalMetrics = (goal) => {
   }
 }
 
-export default function GoalsScreen({ setViewMode, budgets = [], setBudgets }) {
+export default function GoalsScreen({ setViewMode, budgets = [], setBudgets, onDataMutated }) {
   const { user, userProfile } = useAuth()
   const planTier = userProfile?.plan_tier || userProfile?.planTier || "free"
   const planTierNormalized = String(planTier).toLowerCase()
@@ -421,6 +421,7 @@ export default function GoalsScreen({ setViewMode, budgets = [], setBudgets }) {
             : budget,
         ),
       )
+      onDataMutated?.()
     } catch (transactionUnexpected) {
       console.error("Unexpected error syncing contribution to budget:", transactionUnexpected)
     }
@@ -751,4 +752,9 @@ GoalsScreen.propTypes = {
     }),
   ),
   setBudgets: PropTypes.func.isRequired,
+  onDataMutated: PropTypes.func,
+}
+
+GoalsScreen.defaultProps = {
+  onDataMutated: undefined,
 }

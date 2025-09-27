@@ -72,6 +72,7 @@ export default function BudgetsScreen({
   userId,
   onMetadataChange,
   onMetadataRemove,
+  onDataMutated,
 }) {
   const { userProfile } = useAuth()
   const planTier = userProfile?.plan_tier || userProfile?.planTier || "free"
@@ -160,6 +161,7 @@ export default function BudgetsScreen({
 
         setSelectedBudget({ ...newBudget, cycleMetadata })
         setViewMode("details")
+        onDataMutated?.()
       }
     } catch (error) {
       console.error("Error creating budget:", error)
@@ -200,6 +202,7 @@ export default function BudgetsScreen({
             ...(metadata.changeLog || []),
           ],
         }))
+        onDataMutated?.()
       }
     } catch (error) {
       console.error("Error updating budget:", error)
@@ -254,6 +257,7 @@ export default function BudgetsScreen({
             ...(metadata.changeLog || []),
           ],
         }))
+        onDataMutated?.()
       }
     } catch (error) {
       console.error("Error duplicating budget:", error)
@@ -274,6 +278,7 @@ export default function BudgetsScreen({
       } else {
         setBudgets((prev) => prev.filter((b) => b.id !== budgetId))
         onMetadataRemove?.(budgetId)
+        onDataMutated?.()
       }
     } catch (error) {
       console.error("Error deleting budget:", error)
@@ -726,9 +731,11 @@ BudgetsScreen.propTypes = {
   userId: PropTypes.string.isRequired,
   onMetadataChange: PropTypes.func,
   onMetadataRemove: PropTypes.func,
+  onDataMutated: PropTypes.func,
 }
 
 BudgetsScreen.defaultProps = {
   onMetadataChange: undefined,
   onMetadataRemove: undefined,
+  onDataMutated: undefined,
 }

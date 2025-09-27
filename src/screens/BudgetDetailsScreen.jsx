@@ -90,6 +90,7 @@ export default function BudgetDetailsScreen({
   budgets,
   setSelectedBudget,
   onMetadataChange,
+  onDataMutated,
 }) {
   const { user, userProfile } = useAuth()
   const planTier = userProfile?.plan_tier || userProfile?.planTier || "free"
@@ -323,6 +324,7 @@ export default function BudgetDetailsScreen({
           ...(metadata.changeLog || []),
         ],
       }))
+      onDataMutated?.()
     } finally {
       setLoading(false)
       setSnackbar(null)
@@ -364,6 +366,7 @@ export default function BudgetDetailsScreen({
           ...(metadata.changeLog || []),
         ],
       }))
+      onDataMutated?.()
       setSnackbar({
         message: "Allocations updated",
         actionLabel: "Undo",
@@ -738,6 +741,7 @@ export default function BudgetDetailsScreen({
 
       setBudgets(updatedBudgets)
       setSelectedBudget(updatedBudgets.find((b) => b.id === budget.id))
+      onDataMutated?.()
       setShowModal(false)
       setEditingTx(null)
     } catch (error) {
@@ -790,6 +794,7 @@ export default function BudgetDetailsScreen({
       })
 
       setBudgetNameDraft(trimmed)
+      onDataMutated?.()
     } catch (error) {
       console.error("Error updating budget name:", error)
       setBudgetNameDraft(budget.name || "")
@@ -2058,8 +2063,10 @@ BudgetDetailsScreen.propTypes = {
   ).isRequired,
   setSelectedBudget: PropTypes.func.isRequired,
   onMetadataChange: PropTypes.func,
+  onDataMutated: PropTypes.func,
 }
 
 BudgetDetailsScreen.defaultProps = {
   onMetadataChange: undefined,
+  onDataMutated: undefined,
 }
