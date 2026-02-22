@@ -1,28 +1,22 @@
 import { createClient } from "@supabase/supabase-js"
 import { simulateAIResponse } from "./insightSimulator"
 import { hasSessionExpired } from "./session"
-import * as mock from "./supabase-mock"
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
-const USE_MOCK = !SUPABASE_URL || !SUPABASE_ANON_KEY
+const REQUIRED_ENV_VARS = ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"]
 
-if (USE_MOCK) {
-  console.warn(
-    "Supabase environment variables are missing. Running in demo mode with localStorage."
-  )
+const missing = REQUIRED_ENV_VARS.filter((key) => !import.meta.env[key])
+if (missing.length) {
+  throw new Error(`Missing Supabase environment variables: ${missing.join(", ")}`)
 }
 
-export const supabase = USE_MOCK
-  ? mock.supabase
-  : createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true,
-        flowType: "pkce",
-      },
-    })
+export const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    flowType: "pkce",
+  },
+})
 
 const storage = typeof window !== "undefined" ? window.localStorage : null
 const SESSION_TIMESTAMP_KEY = "pb:last-session-timestamp"

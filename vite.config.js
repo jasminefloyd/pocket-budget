@@ -4,10 +4,7 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: "/",
-  server: {
-    host: true,
-  },
+  base: "/pocket-budget/",
   build: {
     sourcemap: false, // Disable sourcemaps to avoid deployment issues
     rollupOptions: {
