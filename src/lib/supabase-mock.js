@@ -123,6 +123,18 @@ export const supabase = {
       return { error: null }
     },
 
+    getSession: async () => {
+      await delay(100)
+
+      const storedUser = localStorage.getItem("currentUser")
+      if (storedUser) {
+        currentUser = JSON.parse(storedUser)
+        return { data: { session: { user: currentUser } }, error: null }
+      }
+
+      return { data: { session: null }, error: null }
+    },
+
     getUser: async () => {
       await delay(100)
 
@@ -441,4 +453,162 @@ export const getLatestAIInsight = async (userId) => {
   }
   const sorted = [...insights].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   return { data: sorted[0], error: null }
+}
+
+// --- Goals ---
+
+export const getGoals = async (userId) => {
+  await delay()
+  const goals = JSON.parse(localStorage.getItem(`goals_${userId}`) || "[]")
+  return {
+    data: goals.map((g) => ({
+      ...g,
+      goal_contributions: (g.goal_contributions || []).sort(
+        (a, b) => new Date(b.contributed_at) - new Date(a.contributed_at),
+      ),
+    })),
+    error: null,
+  }
+}
+
+export const createGoal = async (userId, goalData) => {
+  await delay()
+  const newGoal = {
+    id: generateId(),
+    user_id: userId,
+    name: goalData.name,
+    target_amount: goalData.targetAmount,
+    target_date: goalData.targetDate,
+    status: goalData.status || "active",
+    milestones: goalData.milestones || [25, 50, 75, 100],
+    linked_budget_id: goalData.linkedBudgetId || null,
+    created_at: new Date().toISOString(),
+    goal_contributions: [],
+  }
+  const existing = JSON.parse(localStorage.getItem(`goals_${userId}`) || "[]")
+  existing.unshift(newGoal)
+  localStorage.setItem(`goals_${userId}`, JSON.stringify(existing))
+  return { data: [newGoal], error: null }
+}
+
+export const updateGoal = async (goalId, goalData) => {
+  await delay()
+  const userId = currentUser?.id
+  const existing = JSON.parse(localStorage.getItem(`goals_${userId}`) || "[]")
+  const index = existing.findIndex((g) => g.id === goalId)
+  if (index > -1) {
+    existing[index] = { ...existing[index], ...goalData }
+    localStorage.setItem(`goals_${userId}`, JSON.stringify(existing))
+    return { data: [existing[index]], error: null }
+  }
+  return { data: null, error: { message: "Goal not found" } }
+}
+
+export const deleteGoal = async (goalId) => {
+  await delay()
+  const userId = currentUser?.id
+  const existing = JSON.parse(localStorage.getItem(`goals_${userId}`) || "[]")
+  const filtered = existing.filter((g) => g.id !== goalId)
+  localStorage.setItem(`goals_${userId}`, JSON.stringify(filtered))
+  return { error: null }
+}
+
+export const addGoalContribution = async (goalId, contributionData) => {
+  await delay()
+  const userId = currentUser?.id
+  const goals = JSON.parse(localStorage.getItem(`goals_${userId}`) || "[]")
+  const goal = goals.find((g) => g.id === goalId)
+  if (!goal) return { data: null, error: { message: "Goal not found" } }
+
+  const contribution = {
+    id: generateId(),
+    goal_id: goalId,
+    amount: contributionData.amount,
+    contributed_at: contributionData.date || new Date().toISOString(),
+    note: contributionData.note || null,
+    created_at: new Date().toISOString(),
+  }
+
+  goal.goal_contributions = goal.goal_contributions || []
+  goal.goal_contributions.push(contribution)
+  localStorage.setItem(`goals_${userId}`, JSON.stringify(goals))
+  return { data: [contribution], error: null }
+}
+
+export const getGoalContributions = async (goalId) => {
+  await delay()
+  const userId = currentUser?.id
+  const goals = JSON.parse(localStorage.getItem(`goals_${userId}`) || "[]")
+  const goal = goals.find((g) => g.id === goalId)
+  const contributions = (goal?.goal_contributions || []).sort(
+    (a, b) => new Date(b.contributed_at) - new Date(a.contributed_at),
+  )
+  return { data: contributions, error: null }
+}
+
+// --- AI Insights ---
+
+export const getAIInsights = async (userId, budgetId) => {
+  await delay()
+  if (!userId || !budgetId) return { data: [], error: null }
+  const all = JSON.parse(localStorage.getItem(`ai_insights_${userId}`) || "[]")
+  const filtered = all.filter((i) => i.budget_id === budgetId)
+  return { data: filtered, error: null }
+}
+
+export const generateAIInsight = async ({ userId, budgetId, metrics = {} }) => {
+  if (!userId || !budgetId) {
+    return { data: null, error: { message: "Missing user or budget context" } }
+  }
+
+  const { simulateAIResponse } = await import("./insightSimulator")
+  const insights = await simulateAIResponse(metrics)
+  const record = {
+    id: `local-insight-${Date.now()}`,
+    user_id: userId,
+    budget_id: budgetId,
+    insights,
+    created_at: new Date().toISOString(),
+    tier: "local",
+  }
+
+  const existing = JSON.parse(localStorage.getItem(`ai_insights_${userId}`) || "[]")
+  existing.unshift(record)
+  localStorage.setItem(`ai_insights_${userId}`, JSON.stringify(existing))
+
+  return { data: record, error: null }
+}
+
+// --- Cash Burn ---
+
+export const getCashBurn = async (userId) => {
+  await delay()
+  if (!userId) return { data: null, error: { message: "User ID is required" } }
+  return { data: null, error: null }
+}
+
+// --- Session helpers ---
+
+const SESSION_TIMESTAMP_KEY = "pb:last-session-timestamp"
+
+export const persistLoginTimestamp = () => {
+  localStorage.setItem(SESSION_TIMESTAMP_KEY, Date.now().toString())
+}
+
+export const clearLoginTimestamp = () => {
+  localStorage.removeItem(SESSION_TIMESTAMP_KEY)
+}
+
+export const getStoredLoginTimestamp = () => {
+  const raw = localStorage.getItem(SESSION_TIMESTAMP_KEY)
+  if (!raw) return null
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+export const shouldRefreshSession = () => {
+  const timestamp = getStoredLoginTimestamp()
+  const SESSION_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000
+  if (timestamp == null) return false
+  return Date.now() - timestamp > SESSION_MAX_AGE_MS
 }
