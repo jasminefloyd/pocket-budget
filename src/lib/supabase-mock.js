@@ -121,6 +121,16 @@ export const supabase = {
       return { error: null }
     },
 
+    getSession: async () => {
+      await delay(100)
+      const storedUser = localStorage.getItem("currentUser")
+      if (storedUser) {
+        currentUser = JSON.parse(storedUser)
+        return { data: { session: { user: currentUser } }, error: null }
+      }
+      return { data: { session: null }, error: null }
+    },
+
     getUser: async () => {
       await delay(100)
 
@@ -152,114 +162,175 @@ export const supabase = {
     },
   },
 
-  from: (table) => ({
-    select: (_columns = "*") => ({
-      eq: (_column, _value) => ({
+  rpc: async () => {
+    await delay()
+    return { data: null, error: null }
+  },
+
+  functions: {
+    invoke: async () => {
+      await delay()
+      return { data: null, error: { message: "Edge functions not available in demo mode" } }
+    },
+  },
+
+  from: (table) => {
+    // Helper to get stored data for the current user
+    const getStored = (key) =>
+      JSON.parse(localStorage.getItem(`${key || table}_${currentUser?.id}`) || "[]")
+    const setStored = (key, value) =>
+      localStorage.setItem(`${key || table}_${currentUser?.id}`, JSON.stringify(value))
+
+    // Chainable query builder that supports the patterns used by supabase.js
+    const buildChain = (data, opts = {}) => {
+      const chain = {
+        eq: (_col, _val) => buildChain(data, { ...opts, eqCol: _col, eqVal: _val }),
+        order: (_col, _orderOpts) => buildChain(data, opts),
+        limit: (_n) => buildChain(data, opts),
+        range: (_from, _to) => buildChain(data, opts),
         single: async () => {
           await delay()
-          const data = JSON.parse(localStorage.getItem(`${table}_${currentUser?.id}`) || "null")
-          return { data, error: data ? null : { code: "PGRST116" } }
+          let stored = null
+          if (opts.eqCol === "id" || opts.eqCol === "user_id") {
+            stored = JSON.parse(
+              localStorage.getItem(`${table}_${opts.eqVal}`) || "null"
+            )
+          }
+          if (!stored) {
+            stored = JSON.parse(
+              localStorage.getItem(`${table}_${currentUser?.id}`) || "null"
+            )
+          }
+          return { data: stored, error: stored ? null : { code: "PGRST116" } }
         },
-        order: (_orderColumn, _options) => ({
-          async then(resolve) {
-            await delay()
-            const allData = JSON.parse(localStorage.getItem(`${table}_${currentUser?.id}`) || "[]")
-            const result = { data: allData, error: null }
-            resolve(result)
-            return result
-          },
-        }),
-      }),
-      order: (_orderColumn, _options) => ({
-        async then(resolve) {
+        select: (_cols) => buildChain(data, opts),
+        then: async (resolve) => {
           await delay()
-          const allData = JSON.parse(localStorage.getItem(`${table}_${currentUser?.id}`) || "[]")
+          let allData = getStored(null)
+
+          // For budgets, attach transactions
+          if (table === "budgets") {
+            const txs = getStored("transactions")
+            allData = allData.map((b) => ({
+              ...b,
+              transactions: (txs || []).filter((tx) => tx.budget_id === b.id),
+            }))
+          }
+
+          // For goals, attach contributions
+          if (table === "goals") {
+            const contribs = getStored("goal_contributions")
+            allData = allData.map((g) => ({
+              ...g,
+              goal_contributions: (contribs || []).filter((c) => c.goal_id === g.id),
+            }))
+          }
+
           const result = { data: allData, error: null }
           resolve(result)
           return result
         },
-      }),
-    }),
+      }
+      return chain
+    }
 
-    insert: (data) => ({
-      select: () => ({
-        async then(resolve) {
-          await delay()
+    return {
+      select: (_columns = "*") => buildChain(null),
 
-          const newItem = Array.isArray(data) ? data[0] : data
-          newItem.id = generateId()
-          newItem.created_at = new Date().toISOString()
-
-          if (table === "budgets") {
-            const existingBudgets = JSON.parse(localStorage.getItem(`budgets_${currentUser?.id}`) || "[]")
-            existingBudgets.unshift(newItem)
-            localStorage.setItem(`budgets_${currentUser?.id}`, JSON.stringify(existingBudgets))
-          } else if (table === "transactions") {
-            const existingTransactions = JSON.parse(localStorage.getItem(`transactions_${currentUser?.id}`) || "[]")
-            existingTransactions.push(newItem)
-            localStorage.setItem(`transactions_${currentUser?.id}`, JSON.stringify(existingTransactions))
-          }
-
-          const result = { data: [newItem], error: null }
-          resolve(result)
-          return result
-        },
-      }),
-    }),
-
-    update: (data) => ({
-      eq: (_column, value) => ({
-        select: () => ({
-          async then(resolve) {
+      insert: (records) => ({
+        select: (_cols) => ({
+          then: async (resolve) => {
             await delay()
+            const items = (Array.isArray(records) ? records : [records]).map((r) => ({
+              ...r,
+              id: r.id || generateId(),
+              created_at: r.created_at || new Date().toISOString(),
+            }))
+            const existing = getStored(null)
+            const merged = [...items, ...existing]
+            setStored(null, merged)
 
-            if (table === "budgets") {
-              const existingBudgets = JSON.parse(localStorage.getItem(`budgets_${currentUser?.id}`) || "[]")
-              const index = existingBudgets.findIndex((item) => item.id === value)
-              if (index > -1) {
-                existingBudgets[index] = { ...existingBudgets[index], ...data }
-                localStorage.setItem(`budgets_${currentUser?.id}`, JSON.stringify(existingBudgets))
-              }
+            // For budgets, attach empty transactions
+            const result = {
+              data: items.map((item) => ({
+                ...item,
+                ...(table === "budgets" ? { transactions: [] } : {}),
+                ...(table === "goals" ? { goal_contributions: [] } : {}),
+              })),
+              error: null,
             }
-
-            const result = { data: [data], error: null }
             resolve(result)
             return result
           },
         }),
       }),
-    }),
 
-    delete: () => ({
-      eq: (_column, value) => ({
-        async then(resolve) {
-          await delay()
-
-          if (table === "budgets") {
-            const existingBudgets = JSON.parse(localStorage.getItem(`budgets_${currentUser?.id}`) || "[]")
-            const filtered = existingBudgets.filter((item) => item.id !== value)
-            localStorage.setItem(`budgets_${currentUser?.id}`, JSON.stringify(filtered))
-          }
-
-          const result = { error: null }
-          resolve(result)
-          return result
-        },
+      update: (updates) => ({
+        eq: (_column, value) => ({
+          select: (_cols) => ({
+            single: async () => {
+              await delay()
+              const existing = getStored(null)
+              const index = existing.findIndex((item) => item.id === value)
+              if (index > -1) {
+                existing[index] = { ...existing[index], ...updates }
+                setStored(null, existing)
+                return { data: existing[index], error: null }
+              }
+              return { data: null, error: { message: "Not found" } }
+            },
+            then: async (resolve) => {
+              await delay()
+              const existing = getStored(null)
+              const index = existing.findIndex((item) => item.id === value)
+              if (index > -1) {
+                existing[index] = { ...existing[index], ...updates }
+                setStored(null, existing)
+              }
+              const result = { data: [existing[index] || updates], error: null }
+              resolve(result)
+              return result
+            },
+          }),
+        }),
       }),
-    }),
 
-    upsert: (data) => ({
-      select: () => ({
-        async then(resolve) {
-          await delay()
-          localStorage.setItem(`${table}_${currentUser?.id}`, JSON.stringify(data))
-          const result = { data: [data], error: null }
-          resolve(result)
-          return result
-        },
+      delete: () => ({
+        eq: (_column, value) => ({
+          then: async (resolve) => {
+            await delay()
+            const existing = getStored(null)
+            const filtered = existing.filter((item) => item.id !== value)
+            setStored(null, filtered)
+            const result = { error: null }
+            resolve(result)
+            return result
+          },
+        }),
       }),
-    }),
-  }),
+
+      upsert: (records) => ({
+        select: (_cols) => ({
+          then: async (resolve) => {
+            await delay()
+            const items = Array.isArray(records) ? records : [records]
+            if (items.length === 1 && items[0].user_id) {
+              // For user_categories-style upserts, store as single record
+              localStorage.setItem(
+                `${table}_${items[0].user_id}`,
+                JSON.stringify(items[0])
+              )
+            } else {
+              setStored(null, items)
+            }
+            const result = { data: items, error: null }
+            resolve(result)
+            return result
+          },
+        }),
+      }),
+    }
+  },
 }
 
 // Auth helper functions
