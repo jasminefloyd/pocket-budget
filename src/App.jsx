@@ -1,5 +1,3 @@
-"use client"
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
 import { getBudgets, getUserCategories, updateUserCategories } from "./lib/supabase"
