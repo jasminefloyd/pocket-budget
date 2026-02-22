@@ -6,7 +6,8 @@ export default defineConfig({
   plugins: [react()],
   base: "/",
   server: {
-    host: true,
+    host: "0.0.0.0",
+    port: 3000,
   },
   build: {
     sourcemap: false, // Disable sourcemaps to avoid deployment issues
