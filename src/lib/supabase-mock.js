@@ -6,7 +6,9 @@ const authListeners = []
 const delay = (ms = 500) => new Promise((resolve) => setTimeout(resolve, ms))
 
 // Mock user data
-const mockUsers = JSON.parse(localStorage.getItem("mockUsers") || "{}")
+const mockUsers = typeof localStorage !== "undefined"
+  ? JSON.parse(localStorage.getItem("mockUsers") || "{}")
+  : {}
 
 // Save mock users to localStorage
 const saveMockUsers = () => {

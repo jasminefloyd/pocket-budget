@@ -1,5 +1,3 @@
-"use client"
-
 import { useMemo, useState } from "react"
 import PropTypes from "prop-types"
 import { createBudget, updateBudget, deleteBudget } from "../lib/supabase"
